@@ -1,6 +1,7 @@
 from textual.worker import Worker, WorkerState
 from textual.app import App, ComposeResult
 from textual.containers import Vertical
+import asyncio
 
 from ui.box import Box
 from net_data.adapter_data import get_adapter_data
@@ -24,8 +25,12 @@ class FieldsetUI(App):
 
     def __init__(self):
         super().__init__()
-        self.selected = 0
+        self.selected_box = 0
         self.current_network = None
+
+        self.known_networks = []
+        self.found_networks = []
+        self.is_connecting = False
         # Initialize boxes with placeholder data for a fast startup
 
         self.boxes = [
@@ -39,6 +44,7 @@ class FieldsetUI(App):
                 title="Device",
                 is_active=True,
                 id="device_box",
+                return_key="Name",
             ),
             Box(
                 columns={
@@ -49,6 +55,7 @@ class FieldsetUI(App):
                 },
                 title="Station",
                 id="station_box",
+                return_key="State",
             ),
             Box(
                 columns={
@@ -60,11 +67,13 @@ class FieldsetUI(App):
                 },
                 title="Known Networks",
                 id="known_networks_box",
+                return_key="Name",
             ),
             Box(
                 columns={"Name": ["-"], "Security": ["-"], "Signal": ["-"]},
                 title="New Networks",
                 id="new_networks_box",
+                return_key="Name",
             ),
         ]
 
@@ -115,7 +124,7 @@ class FieldsetUI(App):
         await self.refresh_all_data()
 
         # Set up different refresh rates for different data types
-        # self.set_interval(2, self.refresh_adapters)
+        self.set_interval(2, self.refresh_adapters)
         self.set_interval(5, self.refresh_networks)
         self.set_interval(10, self.refresh_known_networks)
 
@@ -220,6 +229,7 @@ class FieldsetUI(App):
 
             elif worker.name == "known_networks_loader":
                 known_data = worker.result
+                self.known_networks = known_data
                 self.log(f"Updating known networks UI with {len(known_data)} items")
 
                 known_box = self.query_one("#known_networks_box")
@@ -244,6 +254,7 @@ class FieldsetUI(App):
 
             elif worker.name == "found_networks_loader":
                 found_data = worker.result
+                self.found_networks = found_data
                 self.log(f"Updating found networks UI with {len(found_data)} items")
 
                 found_box = self.query_one("#new_networks_box")
@@ -260,9 +271,53 @@ class FieldsetUI(App):
         elif worker.state == WorkerState.ERROR:
             self.log(f"Worker {worker.name} failed with error: {worker.error}")
 
+    async def connect_to_network(self, network_name: str) -> None:
+        """Connect to a network asynchronously without blocking the UI"""
+        if self.is_connecting:
+            self.log("Already connecting to a network, please wait...")
+            return
+
+        self.is_connecting = True
+        known_box = self.query_one("#known_networks_box")
+        known_box.add_class("connecting")
+        known_box.border_title = f"Connecting to {network_name}..."
+
+        try:
+            # Run nmcli asynchronously
+            process = await asyncio.create_subprocess_exec(
+                "nmcli",
+                "connection",
+                "up",
+                network_name,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            stdout, stderr = await process.communicate()
+
+            if process.returncode == 0:
+                self.log(f"Successfully connected to {network_name}")
+                known_box.border_title = f"Connected to {network_name} ✓"
+                # Refresh adapter data to show new connection state
+                await self.refresh_adapters()
+            else:
+                error_msg = stderr.decode().strip() if stderr else "Unknown error"
+                self.log(f"Failed to connect to {network_name}: {error_msg}")
+                known_box.border_title = f"Failed to connect to {network_name}"
+
+        except Exception as e:
+            self.log(f"Error running nmcli: {e}")
+            known_box.border_title = f"Error: {str(e)}"
+        finally:
+            self.is_connecting = False
+            known_box.remove_class("connecting")
+            # Reset title after a delay
+            self.set_timer(
+                3, lambda: setattr(known_box, "border_title", "Known Networks")
+            )
+
     def on_key(self, event) -> None:
-        # 1. Listen for Tab and Shift+Tab instead of arrow keys
-        if event.key not in ("tab", "shift+tab", "up", "down"):
+        if event.key not in ("tab", "shift+tab", "up", "down", "space", "enter"):
             return
 
         num_boxes = len(self.boxes)
@@ -270,22 +325,40 @@ class FieldsetUI(App):
             return
 
         # Deactivate the current box
-        self.boxes[self.selected].set_active(False)
+        self.boxes[self.selected_box].set_active(False)
 
-        # 2. Use "shift+tab" to go backward (like "up")
+        # Navigation between boxes
         if event.key == "shift+tab":
-            self.selected = (self.selected - 1 + num_boxes) % num_boxes
-        # 3. Use "tab" to go forward (like "down")
+            self.selected_box = (self.selected_box - 1 + num_boxes) % num_boxes
         elif event.key == "tab":
-            self.selected = (self.selected + 1) % num_boxes
+            self.selected_box = (self.selected_box + 1) % num_boxes
 
+        # Navigation within boxes
         if event.key == "up":
-            self.boxes[self.selected].shift_row(-1)
+            self.boxes[self.selected_box].shift_row(-1)
         elif event.key == "down":
-            self.boxes[self.selected].shift_row(1)
+            self.boxes[self.selected_box].shift_row(1)
+
+        # Connect to network on space or enter (for known networks box)
+        if (
+            event.key in ("space", "enter") and self.selected_box == 2
+        ):  # Known Networks box
+            if self.is_connecting:
+                self.log("Please wait, already connecting to a network...")
+                return
+
+            value = self.boxes[self.selected_box].get_value()
+            if value and value != "-":  # Only connect if there's a real network name
+                self.log(f"Attempting to connect to: {value}")
+                # Run the connection asynchronously
+                self.run_worker(
+                    self.connect_to_network(value),
+                    name="network_connector",
+                    exclusive=False,
+                )
 
         # Activate the new box
-        self.boxes[self.selected].set_active(True)
+        self.boxes[self.selected_box].set_active(True)
 
 
 if __name__ == "__main__":

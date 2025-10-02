@@ -17,21 +17,18 @@ class Box(Vertical):
         is_active: bool = False,
         columns: dict[str, list[str]] = None,
         title: str = "",
+        return_key: str = "",
         **kwargs,
     ):
         super().__init__(**kwargs)
-
         self.is_active = is_active
         self.columns = columns or {}
         self.title = title
-
-        # FIX 1: Always create a GridTable instance. This ensures
-        # self.grid_table is never None.
+        self.return_key = return_key
         self.grid_table = GridTable(columns=self.columns)
 
     def compose(self):
         """Yield the GridTable."""
-        # This will now always yield a valid GridTable widget.
         yield self.grid_table
 
     def on_mount(self):
@@ -46,13 +43,18 @@ class Box(Vertical):
         if active:
             self.styles.border = ("solid", green)
             self.add_class("selected-header")
+            self.grid_table.select_row(self.selected_row)
         else:
             self.styles.border = ("solid", gray)
             self.remove_class("selected-header")
 
     def shift_row(self, offset: int):
-        self.selected_row = min(
-            max(self.selected_row + offset, 0), self.grid_table.num_rows - 1
+        """Shift the selected row with bounds checking."""
+        if self.grid_table.num_rows == 0:
+            return
+
+        self.selected_row = max(
+            0, min(self.selected_row + offset, self.grid_table.num_rows - 1)
         )
         self.grid_table.select_row(self.selected_row)
 
@@ -61,6 +63,13 @@ class Box(Vertical):
         if self._has_data_changed(new_columns):
             self.columns = new_columns
             self.grid_table.update_data(new_columns)
+            # Reset selection if we have new data
+            if (
+                self.grid_table.num_rows > 0
+                and self.selected_row >= self.grid_table.num_rows
+            ):
+                self.selected_row = 0
+                self.grid_table.select_row(self.selected_row)
 
     def _has_data_changed(self, new_columns: dict[str, list[str]]) -> bool:
         """Check if the new data is different from current data"""
@@ -72,3 +81,6 @@ class Box(Vertical):
                 return True
 
         return False
+
+    def get_value(self) -> str:
+        return self.columns[self.return_key][self.selected_row]

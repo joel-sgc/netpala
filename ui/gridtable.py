@@ -22,6 +22,8 @@ class GridTable(Widget):
     respecting Textual's widget lifecycle.
     """
 
+    selected_row: int = 0
+
     def __init__(self, columns: dict[str, list[str]], *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.columns = columns
@@ -45,11 +47,18 @@ class GridTable(Widget):
 
             column_values = list(self.columns.values())
             for row_index in range(self.num_rows):
+                cell_classes = "cell"
+                if row_index == self.selected_row:
+                    cell_classes += " selected-row"
                 for col_vals in column_values:
                     value = col_vals[row_index] if row_index < len(col_vals) else ""
-                    cell = Static(value, classes="cell")
+                    cell = Static(value, classes=cell_classes)
                     self.cells.append(cell)
                     yield cell
+
+    def select_row(self, index: int):
+        self.selected_row = index
+        self.refresh_table()
 
     def update_data(self, new_columns: dict[str, list[str]]) -> None:
         """Update the table data, deciding whether to refresh or update."""
@@ -113,6 +122,8 @@ class GridTable(Widget):
         column_values = list(self.columns.values())
         for row_index in range(self.num_rows):
             cell_classes = "cell"
+            if row_index == self.selected_row:
+                cell_classes += " selected-row"
             for col_vals in column_values:
                 value = col_vals[row_index] if row_index < len(col_vals) else ""
                 cell = Static(value, classes=cell_classes)

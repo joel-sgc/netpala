@@ -17,9 +17,9 @@ class FieldsetUI(App):
         .grid3 { grid-size: 3; height: auto; grid-gutter: 0; }
         .grid5 { grid-size: 5; height: auto; grid-gutter: 0; }
         .header { text-align: center; padding: 0 1 1 1; color: #a7abca; }
-        .cell { height: 1; text-align: center; color: #a7abca; }
+        .cell { height: 1; text-align: center; color: #a7abca }
         .selected-header .header { color: #cda162; }
-        .cell.selected-row { background: #444a66; }
+        .selected-header .cell.selected-row { background: #444a66; }
     """
 
     def __init__(self):
@@ -115,7 +115,7 @@ class FieldsetUI(App):
         await self.refresh_all_data()
 
         # Set up different refresh rates for different data types
-        self.set_interval(2, self.refresh_adapters)
+        # self.set_interval(2, self.refresh_adapters)
         self.set_interval(5, self.refresh_networks)
         self.set_interval(10, self.refresh_known_networks)
 
@@ -262,7 +262,7 @@ class FieldsetUI(App):
 
     def on_key(self, event) -> None:
         # 1. Listen for Tab and Shift+Tab instead of arrow keys
-        if event.key not in ("tab", "shift+tab"):
+        if event.key not in ("tab", "shift+tab", "up", "down"):
             return
 
         num_boxes = len(self.boxes)
@@ -278,6 +278,11 @@ class FieldsetUI(App):
         # 3. Use "tab" to go forward (like "down")
         elif event.key == "tab":
             self.selected = (self.selected + 1) % num_boxes
+
+        if event.key == "up":
+            self.boxes[self.selected].shift_row(-1)
+        elif event.key == "down":
+            self.boxes[self.selected].shift_row(1)
 
         # Activate the new box
         self.boxes[self.selected].set_active(True)

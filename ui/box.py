@@ -10,6 +10,7 @@ class Box(Vertical):
     """A container widget with built-in GridTable support."""
 
     is_active: bool = False
+    selected_row: int = 0
 
     def __init__(
         self,
@@ -49,11 +50,17 @@ class Box(Vertical):
             self.styles.border = ("solid", gray)
             self.remove_class("selected-header")
 
+    def shift_row(self, offset: int):
+        self.selected_row = min(
+            max(self.selected_row + offset, 0), self.grid_table.num_rows - 1
+        )
+        self.grid_table.select_row(self.selected_row)
+
     def update_columns(self, new_columns: dict[str, list[str]]):
         """Only update if data actually changed"""
-        # if self._has_data_changed(new_columns):
-        self.columns = new_columns
-        self.grid_table.update_data(new_columns)
+        if self._has_data_changed(new_columns):
+            self.columns = new_columns
+            self.grid_table.update_data(new_columns)
 
     def _has_data_changed(self, new_columns: dict[str, list[str]]) -> bool:
         """Check if the new data is different from current data"""

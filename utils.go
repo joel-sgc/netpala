@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -20,15 +21,26 @@ func window_width() int {
 }
 
 func pad_headers(headers []string) []string {
-	padding := strings.Repeat(" ", (window_width() / (len(headers) * 2)) - 2)
+	total_width := window_width() - 2
+	col_width := total_width / len(headers)
+	
 	for i := range headers {
-		headers[i] = fmt.Sprintf("%s%s%s", padding, headers[i], padding)
+		left_padding := strings.Repeat(" ", (col_width - len(headers[i])) / 2)
+		right_padding:= strings.Repeat(" ", (col_width - len(headers[i])) - len(left_padding))
+
+		headers[i] = fmt.Sprintf("%s%s%s", left_padding, headers[i], right_padding)
+	}
+
+	remaining := total_width % len(headers)
+	for i := range remaining {
+		headers[i]+= " "
 	}
 
 	return headers
 }
+
 func calc_title(title string, selected bool) string {
-	color := "#444a66"
+	color := "#a7abca"
 	bold := false
 	if (selected) {
 		color = "#9cca69"
@@ -43,27 +55,31 @@ func calc_title(title string, selected bool) string {
 }
 
 var box_border = lipgloss.Border{
-	// Top:      	 "─",
 	Bottom:      "─",
 	Left:        "│",
 	Right:       "│",
-	// TopLeft:     "┌",
-	// TopRight:    "┐",
 	BottomLeft:  "└",
 	BottomRight: "┘",
 }
 
 var active_border_style = lipgloss.NewStyle().Foreground(lipgloss.Color("#9cca69"))
-func box_style(selectedRow int) func(row, col int) lipgloss.Style {
+var inactive_border_style = lipgloss.NewStyle().Foreground(lipgloss.Color("#a7abca"))
+
+func box_style(selectedRow int, selectedBox bool) func(row, col int) lipgloss.Style {
 	return func(row int, col int) lipgloss.Style {
 		switch {
 			case row == 0:
 				// Header style
 				return lipgloss.NewStyle().
 					Bold(true).
-					Foreground(lipgloss.Color("#cda162")). // gold
+					Foreground(func() (lipgloss.Color){
+						if selectedBox {
+							return lipgloss.Color("#cda162")
+						}
+						return lipgloss.Color("#a7abca")
+					}()). // gold
 					AlignHorizontal(lipgloss.Center)
-			case row == selectedRow:
+			case row == selectedRow && selectedBox:
 				// Signal column
 				return lipgloss.NewStyle().
 					Background(lipgloss.Color("#a7abca")).
@@ -71,18 +87,108 @@ func box_style(selectedRow int) func(row, col int) lipgloss.Style {
 					AlignHorizontal(lipgloss.Center)
 			default:
 				// Default cell style
-				return lipgloss.NewStyle().Foreground(lipgloss.Color("#444a66")).AlignHorizontal(lipgloss.Center)
+				return lipgloss.NewStyle().Foreground(lipgloss.Color("#a7abca")).AlignHorizontal(lipgloss.Center)
 		}
 	}
 }
-// var inactive_border_style = lipgloss.NewStyle().Foreground(lipgloss.Color("#a7abca"))
+
+func format_device_data(devices []device) [][]string {
+	data := [][]string{
+		pad_headers([]string{"Name", "Mode", "Powered", "Status"}),
+		{""},
+	}
+	for _, d := range devices {
+		powered := "Off"
+		if (d.powered) {
+			powered = "On"
+		}
+
+		row := []string{
+			d.name,
+			d.mode,
+			powered,
+			d.address,
+		}
+		data = append(data, row)
+	}
+
+	return data
+}
+
+func format_station_data(devices []device) [][]string {
+	data := [][]string{
+		pad_headers([]string{"State", "Scanning", "Frequency", "Security"}),
+		{""},
+	}
+	for _, d := range devices {
+		var state string
+		switch d.state {
+			case -1:
+				state = "disconnected"
+			case 0:
+				state = "connecting"
+			case 1:
+				state = "connected"
+		}
+		
+
+		row := []string{
+			state,
+			strconv.FormatBool(d.scanning),
+			strconv.Itoa(d.frequency),
+			d.security,
+		}
+		data = append(data, row)
+	}
+
+	return data
+}
+
+func format_known_networks_data(networks []known_network) [][]string {
+	data := [][]string{
+		pad_headers([]string{" ", "Name", "Security", "Hidden", "Auto Connect", "Signal"}),
+		{""},
+	}
+	for _, n := range networks {
+		
+		row := []string{
+			"",
+			n.ssid,
+			n.security,
+			strconv.FormatBool(n.hidden),
+			strconv.FormatBool(n.auto_connect),
+			strconv.Itoa(n.signal) + "%",
+		}
+		data = append(data, row)
+	}
+
+	return data
+}
+
+func format_scanned_networks_data(networks []scanned_network) [][]string {
+	data := [][]string{
+		pad_headers([]string{"Name", "Security", "Signal"}),
+		{""},
+	}
+	for _, n := range networks {
+		
+		row := []string{
+			n.ssid,
+			n.security,
+			strconv.Itoa(n.signal) + "%",
+		}
+		data = append(data, row)
+	}
+
+	return data
+}
 
 // Gray: a7abca
 // Gold: cda162
 
 var default_netpala_data = netpala_data{
 	selected_box: 0,
-	selected_entry: 3,
+	selected_entry: 2,
 	device_data: []device{
 		{
 			name: "wlan0",
@@ -104,6 +210,14 @@ var default_netpala_data = netpala_data{
 			hidden: true,
 			auto_connect: true,
 			signal: 100,
+		},
+		{
+			bssid: "luc",
+			ssid: "LUC",
+			security: "wpa-eap",
+			hidden: false,
+			auto_connect: true,
+			signal: 0,
 		},
 	},
 	scanned_networks: []scanned_network{

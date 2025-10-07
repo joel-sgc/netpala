@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strconv"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss/table"
@@ -42,9 +41,9 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
                 m.selected_entry--
             }
         case "down", "j":
-            boxes := []any{m.device_data, m.known_networks, m.scanned_networks}
+            boxes := []int{len(m.device_data), len(m.device_data), len(m.known_networks), len(m.scanned_networks)}
 
-            if m.selected_entry < len(boxes[m.selected_box].([]device)) + 2 {
+            if m.selected_entry < boxes[m.selected_box] + 1 {
                 // Type application doesn't change anything here, just for linting
                 m.selected_entry++
             }
@@ -53,10 +52,12 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
         case "shift+tab":
             if m.selected_box > 0 {
                 m.selected_box--
+                m.selected_entry = 2
             }
         case "tab":
-            if m.selected_box < 2 {
+            if m.selected_box < 3 {
                 m.selected_box ++
+                m.selected_entry = 2
             }
 
         // The "enter" key and the spacebar (a literal space) toggle
@@ -77,19 +78,58 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m netpala_data) View() string {
+    border_style_device := inactive_border_style
+    border_style_station := inactive_border_style
+    border_style_known_networks := inactive_border_style
+    border_style_scanned_networks := inactive_border_style
 
-    tbl := table.New().
+    switch m.selected_box {
+        case 0:
+            border_style_device = active_border_style
+        case 1:
+            border_style_station = active_border_style
+        case 2:
+            border_style_known_networks = active_border_style
+        case 3:
+            border_style_scanned_networks = active_border_style
+    }
+
+    device_table_data := format_device_data(m.device_data)
+    device_table := table.New().
         Border(box_border).
         BorderColumn(false).
-        BorderStyle(active_border_style).
-        StyleFunc(box_style(m.selected_entry)).
-        Rows(
-            pad_headers([]string{"Name", "Mode", "Powered", "Status"}),
-            []string{""},
-            []string{default_netpala_data.device_data[0].name, default_netpala_data.device_data[0].mode, strconv.FormatBool(default_netpala_data.device_data[0].powered), fmt.Sprintf("%d",default_netpala_data.device_data[0].state)},
-        )
+        BorderStyle(border_style_device).
+        StyleFunc(box_style(m.selected_entry, m.selected_box == 0)).
+        Rows( device_table_data... )
 
-    return calc_title("Device", true) + tbl.Render() + "\n" + calc_title("Network", true) + tbl.Render()
+    station_table_data := format_station_data(m.device_data)
+    station_table := table.New().
+        Border(box_border).
+        BorderColumn(false).
+        BorderStyle(border_style_station).
+        StyleFunc(box_style(m.selected_entry, m.selected_box == 1)).
+        Rows( station_table_data... )
+
+    known_networks_table_data := format_known_networks_data(m.known_networks)
+    known_networks_table := table.New().
+        Border(box_border).
+        BorderColumn(false).
+        BorderStyle(border_style_known_networks).
+        StyleFunc(box_style(m.selected_entry, m.selected_box == 2)).
+        Rows( known_networks_table_data... )
+
+    scanned_networks_table_data := format_scanned_networks_data(m.scanned_networks)
+    scanned_networks_table := table.New().
+        Border(box_border).
+        BorderColumn(false).
+        BorderStyle(border_style_scanned_networks).
+        StyleFunc(box_style(m.selected_entry, m.selected_box == 3)).
+        Rows( scanned_networks_table_data... )
+
+    return  (calc_title("Device", m.selected_box == 0) + device_table.Render()) + "\n" + 
+            (calc_title("Station", m.selected_box == 1) + station_table.Render()) + "\n" + 
+            (calc_title("Known Networks", m.selected_box == 2) + known_networks_table.Render()) + "\n" +
+            (calc_title("New Networks", m.selected_box == 3) + scanned_networks_table.Render())    
 }
 
 func main() {

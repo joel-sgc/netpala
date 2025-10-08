@@ -13,7 +13,7 @@ import (
 
 func NetpalaModel() netpala_data {
 	return netpala_data{
-        selected_box: 2,
+        selected_box: 0,
         selected_entry: 0,
         device_data: get_devices_data(),
         known_networks: get_known_networks(),
@@ -50,7 +50,7 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
         case "down", "j":
             boxes := []int{len(m.device_data), len(m.device_data), len(m.known_networks), len(m.scanned_networks)}
 
-            if m.selected_entry < boxes[m.selected_box] - 3 {
+            if m.selected_entry < boxes[m.selected_box] - 1 {
                 // Type application doesn't change anything here, just for linting
                 m.selected_entry++
             }

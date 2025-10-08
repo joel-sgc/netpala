@@ -32,44 +32,74 @@ func freqToBand(freq int) string {
 	}
 }
 
-func pad_headers(headers []string) []string {
+func pad_headers(headers []string, headers_lengths []int) []string {
 	if len(headers) == 0 {
 		return headers
 	}
 
-	total_width := window_width() - 2
-	if total_width < 1 {
-		total_width = 1
+	total_width := max(window_width()-2, 1)
+	num_headers := len(headers)
+
+	// Step 1: Subtract the space taken by fixed-width headers
+	fixed_total := 0
+	var flexible_indices []int
+	for i, length := range headers_lengths {
+		if length > 0 {
+			fixed_total += length + 4 // header width + padding
+		} else {
+			flexible_indices = append(flexible_indices, i)
+		}
 	}
 
-	col_width := total_width / len(headers)
-	if col_width < 1 {
-		col_width = 1
+	remaining_width := total_width - fixed_total
+	if remaining_width < 0 {
+		remaining_width = 0
 	}
 
+	// Step 2: Divide remaining width equally among flexible columns
+	flex_col_width := 0
+	if len(flexible_indices) > 0 {
+		flex_col_width = remaining_width / len(flexible_indices)
+	}
+
+	// Step 3: Pad headers
 	for i := range headers {
-		headerLen := len(headers[i])
-		extra := col_width - headerLen
-		if extra <= 0 {
-			continue
+		var left_padding_count, right_padding_count int
+		var col_width int
+
+		if headers_lengths[i] > 0 {
+			left_padding_count = 2
+			right_padding_count = 2
+		} else {
+			col_width = flex_col_width
+			headerLen := len(headers[i])
+			extra := col_width - headerLen
+			if extra <= 0 {
+				continue
+			}
+			left_padding_count = extra / 2
+			right_padding_count = extra - left_padding_count
 		}
 
-		leftPaddingCount := extra / 2
-		rightPaddingCount := extra - leftPaddingCount
-
-		left_padding := strings.Repeat(" ", leftPaddingCount)
-		right_padding := strings.Repeat(" ", rightPaddingCount)
-
+		left_padding := strings.Repeat(" ", left_padding_count)
+		right_padding := strings.Repeat(" ", right_padding_count)
 		headers[i] = fmt.Sprintf("%s%s%s", left_padding, headers[i], right_padding)
 	}
 
-	remaining := total_width % len(headers)
-	for i := 0; i < remaining; i++ {
-		headers[i%len(headers)] += " "
+	// Step 4: Adjust rounding difference to perfectly fill width
+	current_total := 0
+	for _, h := range headers {
+		current_total += len(h)
+	}
+
+	diff := total_width - current_total
+	for i := 0; i < diff; i++ {
+		headers[i%num_headers] += " "
 	}
 
 	return headers
 }
+
 
 func calc_title(title string, selected bool) string {
 	color := "#a7abca"
@@ -81,10 +111,7 @@ func calc_title(title string, selected bool) string {
 
 	// Ensure repeat count is non-negative
 	width := window_width()
-	repeatCount := width - 4 - len(title)
-	if repeatCount < 0 {
-		repeatCount = 0
-	}
+	repeatCount := max(width - 4 - len(title), 0)
 
 	return lipgloss.NewStyle().
 		Bold(bold).
@@ -133,7 +160,7 @@ func box_style(selectedRow int, selectedBox bool) func(row, col int) lipgloss.St
 
 func format_device_data(devices []device) [][]string {
 	data := [][]string{
-		pad_headers([]string{"Name", "Mode", "Powered", "Status"}),
+		pad_headers([]string{"Name", "Mode", "Powered", "Status"}, []int{-1, -1, -1, -1}),
 		{""},
 	}
 	for _, d := range devices {
@@ -156,7 +183,7 @@ func format_device_data(devices []device) [][]string {
 
 func format_station_data(devices []device) [][]string {
 	data := [][]string{
-		pad_headers([]string{"State", "Scanning", "Frequency", "Security"}),
+		pad_headers([]string{"State", "Scanning", "Frequency", "Security"}, []int{-1, -1, -1, -1}),
 		{""},
 	}
 	for _, d := range devices {
@@ -185,7 +212,7 @@ func format_station_data(devices []device) [][]string {
 func format_known_networks_data(networks []known_network, selected_row int) [][]string {
 	// base rows: headers + blank
 	base := [][]string{
-		pad_headers([]string{" ", "Name", "Security", "Hidden", "Auto Connect", "Signal"}),
+		pad_headers([]string{"", "Name", "Security", "Hidden", "Auto Connect", "Signal"}, []int{5, -1, 23, 5, 5, 6}),
 		{""},
 	}
 
@@ -194,12 +221,13 @@ func format_known_networks_data(networks []known_network, selected_row int) [][]
 	// append only those networks
 	for i := start; i < end; i++ {
 		n := networks[i]
-		connected := ""
+		connected := "     "
 		if n.connected {
-			connected = "✓"
+			connected = "  >  "
+
 		}
 
-		row := []string{
+ 		row := []string{
 			connected,
 			n.ssid,
 			n.security,
@@ -215,7 +243,7 @@ func format_known_networks_data(networks []known_network, selected_row int) [][]
 
 func format_scanned_networks_data(networks []scanned_network, selected_row int) [][]string {
 	data := [][]string{
-		pad_headers([]string{"Name", "Security", "Signal"}),
+		pad_headers([]string{"Name", "Security", "Signal"}, []int{-1, -1, -1}),
 		{""},
 	}
 

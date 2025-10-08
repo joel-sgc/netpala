@@ -14,12 +14,8 @@ func get_props(o dbus.BusObject, iface string) map[string]dbus.Variant {
 	return m
 }
 
-// scanWifiNetworks scans for available WiFi networks and returns them with duplicates removed
 func get_scanned_networks() []scanned_network {
-	c, err := dbus.SystemBus()
-	if err != nil {
-		// fmt.Errorf("failed to connect to system bus: %v", err)
-	}
+	c, _ := dbus.SystemBus()
 
 	nm := c.Object(nmDest, dbus.ObjectPath(nmPath))
 
@@ -133,7 +129,7 @@ func get_security_type(wpaFlags, rsnFlags uint32) string {
 	if rsnFlags&NM_802_11_AP_SEC_KEY_MGMT_EAP_SUITE_B_192 != 0 {
 		security = append(security, "wpa3-eap-192")
 	}
-
+	
 	// WPA2/WPA Enterprise (802.1X)
 	if (rsnFlags&NM_802_11_AP_SEC_KEY_MGMT_802_1X != 0) || (wpaFlags&NM_802_11_AP_SEC_KEY_MGMT_802_1X != 0) {
 		security = append(security, "wpa2-eap")

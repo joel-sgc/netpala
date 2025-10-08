@@ -5,13 +5,20 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 )
 
 
 
 func NetpalaModel() netpala_data {
-	return default_netpala_data
+	return netpala_data{
+        selected_box: 2,
+        selected_entry: 0,
+        device_data: get_devices_data(),
+        known_networks: get_known_networks(),
+        scanned_networks: get_scanned_networks(),
+    }
 }
 
 func (m netpala_data) Init() tea.Cmd {
@@ -37,13 +44,13 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
         // "up" and "k" for upwards cursor nav, "down" and "j" for downwards cursor nav within our box
         case "up", "k":
-            if m.selected_entry > 2 {
+            if m.selected_entry > 0 {
                 m.selected_entry--
             }
         case "down", "j":
             boxes := []int{len(m.device_data), len(m.device_data), len(m.known_networks), len(m.scanned_networks)}
 
-            if m.selected_entry < boxes[m.selected_box] + 1 {
+            if m.selected_entry < boxes[m.selected_box] - 3 {
                 // Type application doesn't change anything here, just for linting
                 m.selected_entry++
             }
@@ -52,12 +59,12 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
         case "shift+tab":
             if m.selected_box > 0 {
                 m.selected_box--
-                m.selected_entry = 2
+                m.selected_entry = 0
             }
         case "tab":
             if m.selected_box < 3 {
                 m.selected_box ++
-                m.selected_entry = 2
+                m.selected_entry = 0
             }
 
         // The "enter" key and the spacebar (a literal space) toggle
@@ -110,7 +117,7 @@ func (m netpala_data) View() string {
         StyleFunc(box_style(m.selected_entry, m.selected_box == 1)).
         Rows( station_table_data... )
 
-    known_networks_table_data := format_known_networks_data(m.known_networks)
+    known_networks_table_data := format_known_networks_data(m.known_networks, m.selected_entry)
     known_networks_table := table.New().
         Border(box_border).
         BorderColumn(false).
@@ -118,7 +125,7 @@ func (m netpala_data) View() string {
         StyleFunc(box_style(m.selected_entry, m.selected_box == 2)).
         Rows( known_networks_table_data... )
 
-    scanned_networks_table_data := format_scanned_networks_data(m.scanned_networks)
+    scanned_networks_table_data := format_scanned_networks_data(m.scanned_networks, m.selected_entry)
     scanned_networks_table := table.New().
         Border(box_border).
         BorderColumn(false).
@@ -128,8 +135,8 @@ func (m netpala_data) View() string {
 
     return  (calc_title("Device", m.selected_box == 0) + device_table.Render()) + "\n" + 
             (calc_title("Station", m.selected_box == 1) + station_table.Render()) + "\n" + 
-            (calc_title("Known Networks", m.selected_box == 2) + known_networks_table.Render()) + "\n" +
-            (calc_title("New Networks", m.selected_box == 3) + scanned_networks_table.Render())    
+            (calc_title("Known Networks", m.selected_box == 2) + lipgloss.NewStyle().Render(known_networks_table.Render())) + "\n" + 
+            (calc_title("New Networks", m.selected_box == 3) + lipgloss.NewStyle().Render(scanned_networks_table.Render()))
 }
 
 func main() {

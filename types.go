@@ -30,6 +30,7 @@ type known_network struct {
 	hidden bool
 	auto_connect bool
 	signal int      // 1-100 or maybe just 1-5, not sure yet
+	connected bool
 }
 
 type scanned_network struct {

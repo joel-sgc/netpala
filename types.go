@@ -1,41 +1,75 @@
 package main
 
-type netpala_data struct {
-	width, height int		// To denote width,length of the terminal window
-	
-	selected_box int        // To denote which box is selected
-	selected_entry int      // To denote which option within our selected box is selected
+import (
+	"github.com/godbus/dbus/v5"
+)
 
-	device_data []device
-	known_networks []known_network
+// // Message sent when device data should be updated.
+// type deviceUpdateMsg []device
+// // Message sent when known networks should be updated.
+// type knownNetworksUpdateMsg []known_network
+// // Message sent when scanned networks should be updated.
+// type scannedNetworksUpdateMsg []scanned_network
+
+// // Message to signal an error from a goroutine.
+// type errMsg struct{ err error }
+
+// // Message sent from our periodic timer to trigger a full refresh.
+// type periodicRefreshMsg struct{}
+
+// // Message sent from our debounce timer to perform a scan.
+// type performScanRefreshMsg struct{}
+
+type deviceUpdateMsg []device
+type knownNetworksUpdateMsg []known_network
+type scannedNetworksUpdateMsg []scanned_network
+type errMsg struct{ err error }
+type periodicRefreshMsg struct{}
+type performScanRefreshMsg struct{}
+
+
+type netpala_data struct {
+	width, height  int
+	selected_box   int
+	selected_entry int
+
+	device_data      []device
+	known_networks   []known_network
 	scanned_networks []scanned_network
+
+	conn        *dbus.Conn
+	err         error
+	dbusSignals chan *dbus.Signal
 }
 
 type device struct {
-	name string
-	mode string
-	powered bool
-	address string
-	state int   // -1 for disconnected, 0 for connecting, 1 for connected
-	currentbssid string     // "" if not connected, or ig we could just not check it if state != 1
-	scanning bool
-	frequency int
-	security string
+	path         dbus.ObjectPath
+	name         string
+	mode         string
+	powered      bool
+	address      string
+	state        int
+	currentbssid string
+	scanning     bool
+	frequency    int
+	security     string
 }
 
 type known_network struct {
-	bssid string
-	ssid string
-	security string
-	hidden bool
+	path         dbus.ObjectPath
+	bssid        string
+	ssid         string
+	security     string
+	hidden       bool
 	auto_connect bool
-	signal int      // 1-100 or maybe just 1-5, not sure yet
-	connected bool
+	signal       int
+	connected    bool
 }
 
 type scanned_network struct {
-	bssid string
-	ssid string
+	path     dbus.ObjectPath
+	bssid    string
+	ssid     string
 	security string
-	signal int      // Same as known_networks.signal
+	signal   int
 }

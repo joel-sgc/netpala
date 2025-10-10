@@ -27,15 +27,18 @@ type errMsg struct{ err error }
 type periodicRefreshMsg struct{}
 type performScanRefreshMsg struct{}
 
-
 type netpala_data struct {
 	width, height  int
 	selected_box   int
 	selected_entry int
-
+	
 	device_data      []device
 	known_networks   []known_network
 	scanned_networks []scanned_network
+	status_bar 		 	 status_bar_data
+
+	network_to_connect 	scanned_network
+	is_typing				 		bool
 
 	conn        *dbus.Conn
 	err         error
@@ -67,7 +70,7 @@ type known_network struct {
 }
 
 type scanned_network struct {
-	path     dbus.ObjectPath
+	// path     dbus.ObjectPath
 	bssid    string
 	ssid     string
 	security string

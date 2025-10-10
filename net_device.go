@@ -26,17 +26,25 @@ func get_devices_data(c *dbus.Conn) []device {
 	_ = settingsObj.Call("org.freedesktop.NetworkManager.Settings.ListConnections", 0).Store(&connPaths)
 
 	inferSecurity := func(sec map[string]dbus.Variant) string {
-		if sec == nil { return "-" }
+		if sec == nil {
+			return "-"
+		}
 		if v, ok := sec["key-mgmt"]; ok {
 			km := strings.ToLower(v.Value().(string))
 			switch {
-			case strings.Contains(km, "sae"): return "wpa-sae"
-			case strings.Contains(km, "wpa-psk"): return "wpa-psk"
-			case strings.Contains(km, "wpa-eap"): return "wpa-eap"
-			case strings.Contains(km, "none"): return "open"
+			case strings.Contains(km, "sae"):
+				return "wpa-sae"
+			case strings.Contains(km, "wpa-psk"):
+				return "wpa-psk"
+			case strings.Contains(km, "wpa-eap"):
+				return "wpa-eap"
+			case strings.Contains(km, "none"):
+				return "open"
 			}
 		}
-		if _, ok := sec["psk"]; ok { return "wpa-psk" }
+		if _, ok := sec["psk"]; ok {
+			return "wpa-psk"
+		}
 		return "encrypted"
 	}
 
@@ -46,7 +54,9 @@ func get_devices_data(c *dbus.Conn) []device {
 	for _, d := range devs {
 		obj := c.Object(nmDest, d)
 		dp := get_props(obj, devIF)
-		if dp["DeviceType"].Value().(uint32) != 2 { continue }
+		if dp["DeviceType"].Value().(uint32) != 2 {
+			continue
+		}
 
 		var deviceState int = -1 // Default to disconnected
 		if stateVar, ok := dp["State"]; ok {
@@ -83,11 +93,15 @@ func get_devices_data(c *dbus.Conn) []device {
 			}
 			ssidVar, _ := apObj.GetProperty("org.freedesktop.NetworkManager.AccessPoint.Ssid")
 			activeSSID := ""
-			if b, ok := ssidVar.Value().([]byte); ok { activeSSID = strings.TrimRight(string(b), "\x00") }
+			if b, ok := ssidVar.Value().([]byte); ok {
+				activeSSID = strings.TrimRight(string(b), "\x00")
+			}
 			for _, cpath := range connPaths {
 				cobj := c.Object(nmDest, cpath)
 				var settings map[string]map[string]dbus.Variant
-				if cobj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSettings", 0).Store(&settings) != nil { continue }
+				if cobj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSettings", 0).Store(&settings) != nil {
+					continue
+				}
 				if wcfg, ok := settings["802-11-wireless"]; ok {
 					if ssidV, ok := wcfg["ssid"]; ok {
 						if b, ok := ssidV.Value().([]byte); ok && strings.TrimRight(string(b), "\x00") == activeSSID {
@@ -99,17 +113,19 @@ func get_devices_data(c *dbus.Conn) []device {
 			}
 		}
 		modeStr := map[uint32]string{1: "ad-hoc", 2: "station", 3: "ap", 4: "mesh"}[mode]
-		if modeStr == "" { modeStr = fmt.Sprintf("%d", mode) }
+		if modeStr == "" {
+			modeStr = fmt.Sprintf("%d", mode)
+		}
 
 		devicesList = append(devicesList, device{
 			path: d,
 			name: iface, mode: modeStr,
-			powered: p["WirelessEnabled"].Value().(bool) && p["WirelessHardwareEnabled"].Value().(bool),
-			address: mac,
-			state:   deviceState, // **FIX:** Use the accurate per-device state.
+			powered:      p["WirelessEnabled"].Value().(bool) && p["WirelessHardwareEnabled"].Value().(bool),
+			address:      mac,
+			state:        deviceState, // **FIX:** Use the accurate per-device state.
 			currentbssid: bssid,
-			scanning: isScanning,
-			frequency: frequency, security: security,
+			scanning:     isScanning,
+			frequency:    frequency, security: security,
 		})
 	}
 	return devicesList

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss/table"
 	"github.com/godbus/dbus/v5"
 )
 
@@ -54,6 +53,8 @@ func NetpalaModel() netpala_data {
 		device_data:      []device{},
 		known_networks:   []known_network{},
 		scanned_networks: []scanned_network{},
+		status_bar: 			StatusBarModel(),
+		is_typing: false,
 	}
 }
 
@@ -70,6 +71,8 @@ func (m netpala_data) Init() tea.Cmd {
 }
 
 func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
 	if m.err != nil {
 		if key, ok := msg.(tea.KeyMsg); ok {
 			switch key.String() {
@@ -80,34 +83,75 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.is_typing {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "ctrl+c", "esc":
+				m.is_typing = false
+				m.status_bar.input.Placeholder = ""
+				m.status_bar.input.Blur()
+				m.status_bar.input.SetValue("")
+				return m, nil
+
+			case "enter":
+				password := m.status_bar.input.Value()
+				m.is_typing = false
+				m.status_bar.input.Placeholder = ""
+				m.status_bar.input.Blur()
+				m.status_bar.input.SetValue("")
+
+				if len(m.device_data) == 0 {
+					return m, func() tea.Msg {
+						return errMsg{fmt.Errorf("no wifi device found")}
+					}
+				}
+				wifiDevice := m.device_data[0]
+
+				// Use the stored network to connect, not the current selection
+				return m, addAndConnectToNetworkCmd(m.conn, m.network_to_connect, password, wifiDevice.path)
+			}
+		}
+
+		m.status_bar.input, cmd = m.status_bar.input.Update(msg)
+		return m, cmd
+	}
+
 	switch msg := msg.(type) {
 	case deviceUpdateMsg:
 		m.device_data = msg
-		// After the model is updated, we can listen for the next signal.
 		return m, waitForDBusSignal(m.conn, m.dbusSignals)
 
 	case knownNetworksUpdateMsg:
 		m.known_networks = msg
-		// After the model is updated, we can listen for the next signal.
 		return m, waitForDBusSignal(m.conn, m.dbusSignals)
 
 	case scannedNetworksUpdateMsg:
-		// The `nil` message is the trigger from the listener.
 		if msg == nil {
 			debounceCmd := tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
 				return performScanRefreshMsg{}
 			})
-			// Re-arm the main listener right away, but start the debounce timer.
 			return m, tea.Batch(waitForDBusSignal(m.conn, m.dbusSignals), debounceCmd)
 		}
-		// This is the actual data from a completed scan.
-		m.scanned_networks = msg
-		// No need to re-arm listener here, as it's handled by the debounce logic.
+
+		// NEW: Filter out known networks from the scanned list
+		knownSSIDs := make(map[string]struct{})
+		for _, known := range m.known_networks {
+			knownSSIDs[known.ssid] = struct{}{}
+		}
+
+		var filteredNetworks []scanned_network
+		for _, scanned := range msg {
+			if _, exists := knownSSIDs[scanned.ssid]; !exists {
+				filteredNetworks = append(filteredNetworks, scanned)
+			}
+		}
+		m.scanned_networks = filteredNetworks
+		// END NEW
+
 		return m, nil
 
 	case performScanRefreshMsg:
-		// The debounce timer fired, now perform the scan.
-		// The listener is already running from the previous step.
 		return m, requestScan(m.conn)
 
 	case errMsg:
@@ -129,13 +173,16 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.conn.Close()
 			return m, tea.Quit
 
+		case "r":
+			return m, requestScan(m.conn)
+
 		case "up", "k":
-			if m.selected_entry > 0 {
+			if m.selected_entry > 0 && !m.is_typing {
 				m.selected_entry--
 			}
 		case "down", "j":
 			boxes := []int{len(m.device_data), len(m.device_data), len(m.known_networks), len(m.scanned_networks)}
-			if m.selected_box < len(boxes) && m.selected_entry < boxes[m.selected_box]-1 {
+			if m.selected_box < len(boxes) && m.selected_entry < boxes[m.selected_box]-1 && !m.is_typing {
 				m.selected_entry++
 			}
 
@@ -150,78 +197,36 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected_entry = 0
 			}
 		case "enter", " ":
-			// Check that we're in the "Known Networks" box and have networks to select from.
 			if m.selected_box == 2 && len(m.known_networks) > 0 && len(m.device_data) > 0 {
 				selectedNetwork := m.known_networks[m.selected_entry]
-				
-				// For simplicity, we'll use the first available Wi-Fi device.
 				wifiDevice := m.device_data[0]
-
-				// Return the command to connect!
 				return m, connectToNetworkCmd(m.conn, selectedNetwork.path, wifiDevice.path)
+
+			} else if m.selected_box == 3 && len(m.scanned_networks) > 0 && len(m.device_data) > 0 {
+				// Store the selected network before entering typing mode
+				m.network_to_connect = m.scanned_networks[m.selected_entry]
+				m.is_typing = true
+				m.status_bar.input.Placeholder = "Enter Password for " + m.network_to_connect.ssid
+				m.status_bar.input.Focus()
+				return m, nil
 			}
-		}		
+		}
 	}
 	return m, nil
 }
+
 
 func (m netpala_data) View() string {
 	if m.err != nil {
 		return fmt.Sprintf("\nAn error occurred: %v\n\nPress 'q' to quit.", m.err)
 	}
 
-	border_style_device := inactive_border_style
-	border_style_station := inactive_border_style
-	border_style_known_networks := inactive_border_style
-	border_style_scanned_networks := inactive_border_style
-
-	switch m.selected_box {
-	case 0:
-		border_style_device = active_border_style
-	case 1:
-		border_style_station = active_border_style
-	case 2:
-		border_style_known_networks = active_border_style
-	case 3:
-		border_style_scanned_networks = active_border_style
-	}
-
-	device_table_data := format_device_data(m.device_data)
-	device_table := table.New().
-		Border(box_border).
-		BorderColumn(false).
-		BorderStyle(border_style_device).
-		StyleFunc(box_style(m.selected_entry, m.selected_box == 0)).
-		Rows(device_table_data...)
-
-	station_table_data := format_station_data(m.device_data)
-	station_table := table.New().
-		Border(box_border).
-		BorderColumn(false).
-		BorderStyle(border_style_station).
-		StyleFunc(box_style(m.selected_entry, m.selected_box == 1)).
-		Rows(station_table_data...)
-
-	known_networks_table_data := format_known_networks_data(m.known_networks, m.selected_entry)
-	known_networks_table := table.New().
-		Border(box_border).
-		BorderColumn(false).
-		BorderStyle(border_style_known_networks).
-		StyleFunc(box_style(m.selected_entry, m.selected_box == 2)).
-		Rows(known_networks_table_data...)
-
-	scanned_networks_table_data := format_scanned_networks_data(m.scanned_networks, m.selected_entry)
-	scanned_networks_table := table.New().
-		Border(box_border).
-		BorderColumn(false).
-		BorderStyle(border_style_scanned_networks).
-		StyleFunc(box_style(m.selected_entry, m.selected_box == 3)).
-		Rows(scanned_networks_table_data...)
-
-	return (calc_title("Device", m.selected_box == 0) + device_table.Render()) + "\n" +
-		(calc_title("Station", m.selected_box == 1) + station_table.Render()) + "\n" +
-		(calc_title("Known Networks", m.selected_box == 2) + known_networks_table.Render()) + "\n" +
-		(calc_title("New Networks", m.selected_box == 3) + scanned_networks_table.Render())
+	device_table := TableModel("Device", m.selected_box == 0, m.selected_entry, m.device_data, nil, nil, nil)
+	station_table := TableModel("Station", m.selected_box == 1, m.selected_entry, nil, m.device_data, nil, nil)
+	known_nets_table := TableModel("Known Networks", m.selected_box == 2, m.selected_entry, nil, nil, m.known_networks, nil)
+	scanned_nets_table := TableModel("New Networks", m.selected_box == 3, m.selected_entry, nil, nil, nil, m.scanned_networks)
+	
+	return device_table.View() + station_table.View() + known_nets_table.View() + scanned_nets_table.View() + m.status_bar.View()
 }
 
 func main() {

@@ -20,15 +20,21 @@ func window_width() int {
 
 func freq_to_band(freq int) string {
 	switch {
-	case freq >= 2400 && freq < 2500: return "2.4 GHz"
-	case freq >= 5000 && freq < 6000: return "5 GHz"
-	case freq >= 5925 && freq < 7125: return "6 GHz"
-	default: return fmt.Sprintf("%d MHz", freq)
+	case freq >= 2400 && freq < 2500:
+		return "2.4 GHz"
+	case freq >= 5000 && freq < 6000:
+		return "5 GHz"
+	case freq >= 5925 && freq < 7125:
+		return "6 GHz"
+	default:
+		return fmt.Sprintf("%d MHz", freq)
 	}
 }
 
 func pad_headers(headers []string, headers_lengths []int) []string {
-	if len(headers) == 0 { return headers }
+	if len(headers) == 0 {
+		return headers
+	}
 	total_width := max(window_width()-2, 1)
 	num_headers := len(headers)
 	fixed_total := 0
@@ -41,9 +47,13 @@ func pad_headers(headers []string, headers_lengths []int) []string {
 		}
 	}
 	remaining_width := total_width - fixed_total
-	if remaining_width < 0 { remaining_width = 0 }
+	if remaining_width < 0 {
+		remaining_width = 0
+	}
 	flex_col_width := 0
-	if len(flexible_indices) > 0 { flex_col_width = remaining_width / len(flexible_indices) }
+	if len(flexible_indices) > 0 {
+		flex_col_width = remaining_width / len(flexible_indices)
+	}
 	for i := range headers {
 		var left_padding_count, right_padding_count int
 		var col_width int
@@ -54,7 +64,9 @@ func pad_headers(headers []string, headers_lengths []int) []string {
 			col_width = flex_col_width
 			headerLen := len(headers[i])
 			extra := col_width - headerLen
-			if extra <= 0 { continue }
+			if extra <= 0 {
+				continue
+			}
 			left_padding_count = extra / 2
 			right_padding_count = extra - left_padding_count
 		}
@@ -63,9 +75,13 @@ func pad_headers(headers []string, headers_lengths []int) []string {
 		headers[i] = fmt.Sprintf("%s%s%s", left_padding, headers[i], right_padding)
 	}
 	current_total := 0
-	for _, h := range headers { current_total += len(h) }
+	for _, h := range headers {
+		current_total += len(h)
+	}
 	diff := total_width - current_total
-	for i := 0; i < diff; i++ { headers[i%num_headers] += " " }
+	for i := range diff {
+		headers[i%num_headers] += " "
+	}
 	return headers
 }
 
@@ -99,7 +115,9 @@ func box_style(selectedRow int, selectedBox bool) func(row, col int) lipgloss.St
 			return lipgloss.NewStyle().
 				Bold(true).
 				Foreground(func() lipgloss.Color {
-					if selectedBox { return lipgloss.Color("#cda162") }
+					if selectedBox {
+						return lipgloss.Color("#cda162")
+					}
 					return lipgloss.Color("#a7abca")
 				}()).
 				AlignHorizontal(lipgloss.Center)
@@ -120,7 +138,9 @@ func format_device_data(devices []device) [][]string {
 	}
 	for _, d := range devices {
 		powered := "Off"
-		if d.powered { powered = "On" }
+		if d.powered {
+			powered = "On"
+		}
 		row := []string{d.name, d.mode, powered, d.address}
 		data = append(data, row)
 	}
@@ -134,9 +154,12 @@ func format_station_data(devices []device) [][]string {
 	for _, d := range devices {
 		var state string
 		switch d.state {
-		case -1: state = "disconnected"
-		case 0: state = "connecting"
-		case 1: state = "connected"
+		case -1:
+			state = "disconnected"
+		case 0:
+			state = "connecting"
+		case 1:
+			state = "connected"
 		}
 		row := []string{state, strconv.FormatBool(d.scanning), freq_to_band(d.frequency), d.security}
 		data = append(data, row)
@@ -148,15 +171,18 @@ func format_known_networks_data(networks []known_network, selected_row int) [][]
 	base := [][]string{
 		pad_headers([]string{"", "Name", "Security", "Hidden", "Auto Connect", "Signal"}, []int{5, -1, 23, 5, 5, 6}), {""},
 	}
-	start, end := get_window_indices(len(networks), selected_row, 10)
-	for i := start; i < end; i++ {
-		n := networks[i]
+	window := format_arrays(networks, selected_row)
+	for _, n := range window {
 		connected := "     "
-		if n.connected { connected = "  >  " }
+		if n.connected {
+			connected = "  >  "
+		}
 		row := []string{connected, n.ssid, n.security, strconv.FormatBool(n.hidden), strconv.FormatBool(n.auto_connect), strconv.Itoa(n.signal) + "%"}
 		base = append(base, row)
 	}
-	for i := 0; i < 10-len(networks); i++ { base = append(base, []string{""}) }
+	for i := 0; i < 10-len(networks); i++ {
+		base = append(base, []string{""})
+	}
 	return base
 }
 
@@ -169,33 +195,25 @@ func format_scanned_networks_data(networks []scanned_network, selected_row int) 
 		row := []string{n.ssid, n.security, strconv.Itoa(n.signal) + "%"}
 		data = append(data, row)
 	}
-	for i := 0; i < 10-len(networks); i++ { data = append(data, []string{""}) }
+	for i := 0; i < 10-len(networks); i++ {
+		data = append(data, []string{""})
+	}
 	return data
 }
 
 func format_arrays[arrType known_network | scanned_network](arr []arrType, selected_index int) []arrType {
 	windowSize := 10
 	start := 0
-	if selected_index >= windowSize { start = selected_index - windowSize + 1 }
+	if selected_index >= windowSize {
+		start = selected_index - windowSize + 1
+	}
 	end := start + windowSize
 	if end > len(arr) {
 		end = len(arr)
 		start = max(end-windowSize, 0)
 	}
-	if start > end { start = end }
-	return arr[start:end]
-}
-
-func get_window_indices(n, selectedIndex, windowSize int) (int, int) {
-	if n <= 0 { return 0, 0 }
-	if windowSize <= 0 { return 0, n }
-	start := 0
-	if selectedIndex >= windowSize { start = selectedIndex - windowSize + 1 }
-	end := start + windowSize
-	if end > n {
-		end = n
-		start = max(end-windowSize, 0)
+	if start > end {
+		start = end
 	}
-	if start > end { start = end }
-	return start, end
+	return arr[start:end]
 }

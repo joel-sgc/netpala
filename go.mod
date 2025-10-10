@@ -10,6 +10,8 @@ require (
 
 require (
 	github.com/Wifx/gonetworkmanager v0.5.0 // indirect
+	github.com/atotto/clipboard v0.1.4 // indirect
+	github.com/charmbracelet/bubbles v0.21.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 )
 

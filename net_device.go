@@ -33,11 +33,11 @@ func get_devices_data(c *dbus.Conn) []device {
 			km := strings.ToLower(v.Value().(string))
 			switch {
 			case strings.Contains(km, "sae"):
-				return "wpa-sae"
+				return "wpa3-sae"
 			case strings.Contains(km, "wpa-psk"):
-				return "wpa-psk"
+				return "wpa2-psk"
 			case strings.Contains(km, "wpa-eap"):
-				return "wpa-eap"
+				return "wpa2-eap"
 			case strings.Contains(km, "none"):
 				return "open"
 			}

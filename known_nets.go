@@ -99,21 +99,21 @@ func get_known_networks(conn *dbus.Conn) []known_network {
 				auto = av.Value().(bool)
 			}
 		}
-		sec := "Open"
+		sec := "open"
 		if wsec, ok := s["802-11-wireless-security"]; ok {
 			if km, ok := wsec["key-mgmt"]; ok {
 				kmStr := strings.ToLower(km.Value().(string))
 				switch {
 				case strings.Contains(kmStr, "sae"):
-					sec = "WPA3-SAE"
+					sec = "wpa3-sae"
 				case strings.Contains(kmStr, "wpa-psk"):
-					sec = "WPA/WPA2-PSK"
+					sec = "wpa2-psk"
 				case strings.Contains(kmStr, "wpa-eap"):
-					sec = "WPA-EAP"
+					sec = "wpa2-eap"
 				case strings.Contains(kmStr, "none"):
-					sec = "WEP/Unknown"
+					sec = "wep"
 				default:
-					sec = "Encrypted"
+					sec = "encrypted"
 				}
 			}
 		}

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -209,6 +210,18 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m netpala_data) View() string {
 	if m.err != nil {
 		return fmt.Sprintf("\nAn error occurred: %v\n\nPress 'q' to quit.", m.err)
+	}
+
+	// Filter known network entries out of scanned networks
+	for i := 0; i < len(m.scanned_networks); i++ {
+		scanned := m.scanned_networks[i]
+		
+		for _, known := range m.known_networks {
+			if scanned.ssid == known.ssid && strings.Contains(scanned.security, known.security) {
+				m.scanned_networks = append(m.scanned_networks[:i], m.scanned_networks[i+1:]...)
+				i--
+			}
+		}
 	}
 
 	device_table := TableModel("Device", m.selected_box == 0, m.selected_entry, m.device_data, nil, nil, nil)

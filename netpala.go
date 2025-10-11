@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,11 +11,32 @@ import (
 
 // The initial command to load all data at startup.
 func loadInitialData(conn *dbus.Conn) tea.Cmd {
-	return tea.Batch(
-		func() tea.Msg { return deviceUpdateMsg(get_devices_data(conn)) },
-		func() tea.Msg { return knownNetworksUpdateMsg(get_known_networks(conn)) },
-		func() tea.Msg { return scannedNetworksUpdateMsg(get_scanned_networks(conn)) },
-	)
+	return func() tea.Msg {
+		// Step 1: Fetch all data first to ensure we have both lists.
+		devices := get_devices_data(conn)
+		known := get_known_networks(conn)
+		scanned := get_scanned_networks(conn)
+
+		// Step 2: Perform the filtering logic on the initial data.
+		knownSSIDs := make(map[string]struct{})
+		for _, k := range known {
+			knownSSIDs[k.ssid] = struct{}{}
+		}
+
+		var filteredScanned []scanned_network
+		for _, s := range scanned {
+			if _, exists := knownSSIDs[s.ssid]; !exists {
+				filteredScanned = append(filteredScanned, s)
+			}
+		}
+
+		// Step 3: Send the final, filtered data to the UI in a single batch.
+		return tea.BatchMsg{
+			func() tea.Msg { return deviceUpdateMsg(devices) },
+			func() tea.Msg { return knownNetworksUpdateMsg(known) },
+			func() tea.Msg { return scannedNetworksUpdateMsg(filteredScanned) },
+		}
+	}
 }
 
 func NetpalaModel() netpala_data {
@@ -64,6 +84,7 @@ func (m netpala_data) Init() tea.Cmd {
 	if m.err != nil {
 		return nil
 	}
+	
 	return tea.Batch(
 		loadInitialData(m.conn),
 		refreshTicker(),
@@ -124,6 +145,7 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForDBusSignal(m.conn, m.dbusSignals)
 
 	case knownNetworksUpdateMsg:
+		m.filterKnownFromScanned()
 		m.known_networks = msg
 		return m, waitForDBusSignal(m.conn, m.dbusSignals)
 
@@ -138,6 +160,7 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// This is the actual data from a completed scan.
 		m.scanned_networks = msg
+		m.filterKnownFromScanned()
 		// No need to re-arm listener here, as it's handled by the debounce logic.
 		return m, nil
 
@@ -213,16 +236,16 @@ func (m netpala_data) View() string {
 	}
 
 	// Filter known network entries out of scanned networks
-	for i := 0; i < len(m.scanned_networks); i++ {
-		scanned := m.scanned_networks[i]
-		
-		for _, known := range m.known_networks {
-			if scanned.ssid == known.ssid && strings.Contains(scanned.security, known.security) {
-				m.scanned_networks = append(m.scanned_networks[:i], m.scanned_networks[i+1:]...)
-				i--
-			}
-		}
-	}
+	// for i := 0; i < len(m.scanned_networks); i++ {
+	// 	scanned := m.scanned_networks[i]
+
+	// 	for _, known := range m.known_networks {
+	// 		if scanned.ssid == known.ssid && strings.Contains(scanned.security, known.security) {
+	// 			m.scanned_networks = append(m.scanned_networks[:i], m.scanned_networks[i+1:]...)
+	// 			i--
+	// 		}
+	// 	}
+	// }
 
 	device_table := TableModel("Device", m.selected_box == 0, m.selected_entry, m.device_data, nil, nil, nil)
 	station_table := TableModel("Station", m.selected_box == 1, m.selected_entry, nil, m.device_data, nil, nil)

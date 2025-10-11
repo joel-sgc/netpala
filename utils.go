@@ -217,3 +217,21 @@ func format_arrays[arrType known_network | scanned_network](arr []arrType, selec
 	}
 	return arr[start:end]
 }
+
+func (m *netpala_data) filterKnownFromScanned() {
+	// Create a map of known SSIDs for fast lookups (more efficient than a nested loop)
+	knownSSIDs := make(map[string]struct{})
+	for _, known := range m.known_networks {
+		knownSSIDs[known.ssid] = struct{}{}
+	}
+
+	// Build a new slice containing only the networks we want to keep.
+	// This is more efficient than deleting elements from the slice in-place.
+	var filteredScanned []scanned_network
+	for _, scanned := range m.scanned_networks {
+		if _, exists := knownSSIDs[scanned.ssid]; !exists {
+			filteredScanned = append(filteredScanned, scanned)
+		}
+	}
+	m.scanned_networks = filteredScanned
+}

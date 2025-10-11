@@ -9,16 +9,16 @@ It’s a clone of **Impala** because Impala's UI makes me drool.
 
 - ✅ Lists available **network devices**
 - ✅ Displays **known** and **scanned** networks
+- ✅ Adding password based networks (wpa-psk/sae)
+- ✅ Force network scan with keybind
 - ⚙️ Uses **DBus** to talk directly to NetworkManager and wpa_supplicant
 
 ---
 
 ## ⚠️ What’s Missing / TODO
 
-- ⏳ Adding new networks
-- 🔄 Forcing a scan for nearby networks
-- 🐛 Probably some bugs
-- 🧹 Cleanup for when I care more than I currently do (don’t count on it)
+- Integrating WPA-Enterprise networks, will probably just open an editor tab with a template for the user to configure it 
+- Probably some bugs
 
 It’s functional enough for me right now, but PRs are welcome if you want to polish it up.
 
@@ -42,6 +42,13 @@ cd netpala
 go build
 ./netpala
 \```
+
+Then, edit your omarchy-launch-wifi script to:
+
+```bash
+#!/bin/bash 
+exec setsid uwsm app -- "$TERMINAL" --class=Impala -e ~/netpala/netpala "$@"
+```
 
 You’ll need:
 

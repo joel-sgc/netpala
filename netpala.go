@@ -55,6 +55,7 @@ func NetpalaModel() netpala_data {
 		scanned_networks: []scanned_network{},
 		status_bar: 			StatusBarModel(),
 		is_typing: false,
+		initial_load_complete: false,
 	}
 }
 
@@ -65,7 +66,6 @@ func (m netpala_data) Init() tea.Cmd {
 	return tea.Batch(
 		loadInitialData(m.conn),
 		refreshTicker(),
-		// Start the first listener.
 		waitForDBusSignal(m.conn, m.dbusSignals),
 	)
 }
@@ -127,31 +127,21 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForDBusSignal(m.conn, m.dbusSignals)
 
 	case scannedNetworksUpdateMsg:
+		// The `nil` message is the trigger from the listener.
 		if msg == nil {
 			debounceCmd := tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
 				return performScanRefreshMsg{}
 			})
+			// Re-arm the main listener right away, but start the debounce timer.
 			return m, tea.Batch(waitForDBusSignal(m.conn, m.dbusSignals), debounceCmd)
 		}
-
-		// NEW: Filter out known networks from the scanned list
-		knownSSIDs := make(map[string]struct{})
-		for _, known := range m.known_networks {
-			knownSSIDs[known.ssid] = struct{}{}
-		}
-
-		var filteredNetworks []scanned_network
-		for _, scanned := range msg {
-			if _, exists := knownSSIDs[scanned.ssid]; !exists {
-				filteredNetworks = append(filteredNetworks, scanned)
-			}
-		}
-		m.scanned_networks = filteredNetworks
-		// END NEW
-
+		// This is the actual data from a completed scan.
+		m.scanned_networks = msg
+		// No need to re-arm listener here, as it's handled by the debounce logic.
 		return m, nil
 
 	case performScanRefreshMsg:
+		// The debounce timer fired, now perform the scan.
 		return m, requestScan(m.conn)
 
 	case errMsg:
@@ -206,7 +196,7 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Store the selected network before entering typing mode
 				m.network_to_connect = m.scanned_networks[m.selected_entry]
 				m.is_typing = true
-				m.status_bar.input.Placeholder = "Enter Password for " + m.network_to_connect.ssid
+				m.status_bar.input.Placeholder = "Enter Wi-Fi Password..."
 				m.status_bar.input.Focus()
 				return m, nil
 			}

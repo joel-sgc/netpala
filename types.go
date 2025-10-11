@@ -40,9 +40,10 @@ type netpala_data struct {
 	network_to_connect 	scanned_network
 	is_typing				 		bool
 
-	conn        *dbus.Conn
-	err         error
-	dbusSignals chan *dbus.Signal
+	initial_load_complete bool
+	conn        					*dbus.Conn
+	err         					error
+	dbusSignals 					chan *dbus.Signal
 }
 
 type device struct {

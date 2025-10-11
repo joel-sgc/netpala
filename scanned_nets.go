@@ -69,7 +69,8 @@ func get_scanned_networks(c *dbus.Conn) []scanned_network {
 			}
 
 			allNetworks = append(allNetworks, scanned_network{
-				ssid: ssid, bssid: bssid,
+				ssid:     ssid,
+				bssid:    bssid,
 				security: get_security_type(wpaFlags, rsnFlags),
 				signal:   signal,
 			})

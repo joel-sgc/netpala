@@ -18,6 +18,7 @@ It’s a clone of **Impala** because Impala's UI makes me drool.
 ## ⚠️ What’s Missing / TODO
 
 - Integrating WPA-Enterprise networks, will probably just open an editor tab with a template for the user to configure it 
+- VPN connections manager
 - Probably some bugs
 
 It’s functional enough for me right now, but PRs are welcome if you want to polish it up.

@@ -9,8 +9,10 @@ type table_data struct {
 	title             string
 	is_table_selected bool
 	selected_row      int
+	height						int
 	device_data       []device
 	station_data      []device
+	vpn_data					[]vpn_connection
 	known_networks    []known_network
 	scanned_networks  []scanned_network
 }
@@ -19,8 +21,10 @@ func TableModel(
 	title string,
 	is_table_selected bool,
 	selected_row int,
+	height int,
 	dev_data []device,
 	station_data []device,
+	vpn_data []vpn_connection,
 	known_nets []known_network,
 	scanned_nets []scanned_network,
 ) table_data {
@@ -28,8 +32,10 @@ func TableModel(
 		title:             title,
 		is_table_selected: is_table_selected,
 		selected_row:      selected_row,
+		height: 					 height,
 		device_data:       dev_data,
 		station_data:      station_data,
+		vpn_data: 				 vpn_data,
 		known_networks:    known_nets,
 		scanned_networks:  scanned_nets,
 	}
@@ -54,10 +60,12 @@ func (m table_data) View() string {
 		table_data = format_device_data(m.device_data)
 	} else if m.station_data != nil {
 		table_data = format_station_data(m.station_data)
+	} else if m.vpn_data != nil {
+		table_data = format_vpn_data(m.vpn_data)
 	} else if m.known_networks != nil {
-		table_data = format_known_networks_data(m.known_networks, m.selected_row)
+		table_data = format_known_networks_data(m.known_networks, m.selected_row, m.height)
 	} else {
-		table_data = format_scanned_networks_data(m.scanned_networks, m.selected_row)
+		table_data = format_scanned_networks_data(m.scanned_networks, m.selected_row, m.height)
 	}
 
 	table := table.New().

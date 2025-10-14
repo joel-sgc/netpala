@@ -14,6 +14,7 @@ func loadInitialData(conn *dbus.Conn) tea.Cmd {
 	return func() tea.Msg {
 		// Step 1: Fetch all data first to ensure we have both lists.
 		devices := get_devices_data(conn)
+		vpns := get_vpn_data(conn)
 		known := get_known_networks(conn)
 		scanned := get_scanned_networks(conn)
 
@@ -35,6 +36,7 @@ func loadInitialData(conn *dbus.Conn) tea.Cmd {
 			func() tea.Msg { return deviceUpdateMsg(devices) },
 			func() tea.Msg { return knownNetworksUpdateMsg(known) },
 			func() tea.Msg { return scannedNetworksUpdateMsg(filteredScanned) },
+			func() tea.Msg { return vpnUpdateMsg(vpns) },
 		}
 	}
 }
@@ -71,10 +73,13 @@ func NetpalaModel() netpala_data {
 		conn:             conn,
 		err:              err,
 		dbusSignals:      sigChan,
+		
 		device_data:      []device{},
+		vpn_data: 				[]vpn_connection{},
 		known_networks:   []known_network{},
 		scanned_networks: []scanned_network{},
 		status_bar: 			StatusBarModel(),
+
 		is_typing: false,
 		initial_load_complete: false,
 	}
@@ -144,6 +149,10 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.device_data = msg
 		return m, waitForDBusSignal(m.conn, m.dbusSignals)
 
+	case vpnUpdateMsg:
+		m.vpn_data = msg
+		return m, waitForDBusSignal(m.conn, m.dbusSignals)
+
 	case knownNetworksUpdateMsg:
 		m.filterKnownFromScanned()
 		m.known_networks = msg
@@ -195,7 +204,7 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected_entry--
 			}
 		case "down", "j":
-			boxes := []int{len(m.device_data), len(m.device_data), len(m.known_networks), len(m.scanned_networks)}
+			boxes := []int{len(m.device_data), len(m.device_data), len(m.vpn_data), len(m.known_networks), len(m.scanned_networks)}
 			if m.selected_box < len(boxes) && m.selected_entry < boxes[m.selected_box]-1 && !m.is_typing {
 				m.selected_entry++
 			}
@@ -205,18 +214,30 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected_box--
 				m.selected_entry = 0
 			}
+
+			if len(m.vpn_data) == 0 && m.selected_box == 2 {
+				m.selected_box--
+			}
 		case "tab":
-			if m.selected_box < 3 {
+			if m.selected_box < 4 {
 				m.selected_box++
 				m.selected_entry = 0
 			}
+
+			if len(m.vpn_data) == 0 && m.selected_box == 2 {
+				m.selected_box++
+			}
 		case "enter", " ":
-			if m.selected_box == 2 && len(m.known_networks) > 0 && len(m.device_data) > 0 {
+			if m.selected_box == 2 && len(m.vpn_data) > 0 && len(m.device_data) > 0 {
+				// Connect to VPN
+
+			} else if m.selected_box == 3 && len(m.known_networks) > 0 && len(m.device_data) > 0 {
+				// Connect to known network
 				selectedNetwork := m.known_networks[m.selected_entry]
 				wifiDevice := m.device_data[0]
 				return m, connectToNetworkCmd(m.conn, selectedNetwork.path, wifiDevice.path)
 
-			} else if m.selected_box == 3 && len(m.scanned_networks) > 0 && len(m.device_data) > 0 {
+			} else if m.selected_box == 4 && len(m.scanned_networks) > 0 && len(m.device_data) > 0 {
 				// Store the selected network before entering typing mode
 				m.network_to_connect = m.scanned_networks[m.selected_entry]
 				m.is_typing = true
@@ -235,24 +256,22 @@ func (m netpala_data) View() string {
 		return fmt.Sprintf("\nAn error occurred: %v\n\nPress 'q' to quit.", m.err)
 	}
 
-	// Filter known network entries out of scanned networks
-	// for i := 0; i < len(m.scanned_networks); i++ {
-	// 	scanned := m.scanned_networks[i]
+	var nets_height int = 10
+	if len(m.vpn_data) > 0 {
+		nets_height = 8
+	}
 
-	// 	for _, known := range m.known_networks {
-	// 		if scanned.ssid == known.ssid && strings.Contains(scanned.security, known.security) {
-	// 			m.scanned_networks = append(m.scanned_networks[:i], m.scanned_networks[i+1:]...)
-	// 			i--
-	// 		}
-	// 	}
-	// }
-
-	device_table := TableModel("Device", m.selected_box == 0, m.selected_entry, m.device_data, nil, nil, nil)
-	station_table := TableModel("Station", m.selected_box == 1, m.selected_entry, nil, m.device_data, nil, nil)
-	known_nets_table := TableModel("Known Networks", m.selected_box == 2, m.selected_entry, nil, nil, m.known_networks, nil)
-	scanned_nets_table := TableModel("New Networks", m.selected_box == 3, m.selected_entry, nil, nil, nil, m.scanned_networks)
+	device_table := TableModel("Device", m.selected_box == 0, m.selected_entry, -1, m.device_data, nil, nil, nil, nil)
+	station_table := TableModel("Station", m.selected_box == 1, m.selected_entry, -1, nil, m.device_data, nil, nil, nil)
+	vpn_table := TableModel("Virtual Private Networks", m.selected_box == 2, m.selected_entry, -1, nil, nil, m.vpn_data, nil, nil).View()
+	known_nets_table := TableModel("Known Networks", m.selected_box == 3, m.selected_entry, nets_height, nil, nil, nil, m.known_networks, nil)
+	scanned_nets_table := TableModel("New Networks", m.selected_box == 4, m.selected_entry, nets_height, nil, nil, nil, nil, m.scanned_networks)
 	
-	return device_table.View() + station_table.View() + known_nets_table.View() + scanned_nets_table.View() + m.status_bar.View()
+	if len(m.vpn_data) == 0 {
+		vpn_table = ""
+	}
+
+	return device_table.View() + station_table.View() + vpn_table + known_nets_table.View() + scanned_nets_table.View() + m.status_bar.View()
 }
 
 func main() {

@@ -11,29 +11,32 @@ import (
 // and translates it into a BubbleTea message.
 func waitForDBusSignal(conn *dbus.Conn, sig chan *dbus.Signal) tea.Cmd {
 	return func() tea.Msg {
-		s := <-sig // Block and wait for the next signal
+		s := <-sig
 
 		switch s.Name {
 		case "org.freedesktop.DBus.Properties.PropertiesChanged",
 			"org.freedesktop.NetworkManager.DeviceAdded",
 			"org.freedesktop.NetworkManager.DeviceRemoved",
 			"org.freedesktop.NetworkManager.Device.StateChanged":
-			// **FIX:** The values in a BatchMsg must be tea.Cmds (functions),
-			// not tea.Msgs (data). We wrap our calls in functions.
+			// VPN status changes are broadcast as property changes, so we refresh here.
 			return tea.BatchMsg{
 				func() tea.Msg { return deviceUpdateMsg(get_devices_data(conn)) },
 				func() tea.Msg { return knownNetworksUpdateMsg(get_known_networks(conn)) },
+				func() tea.Msg { return vpnUpdateMsg(get_vpn_data(conn)) }, // <-- ADDED
 			}
 
 		case "org.freedesktop.NetworkManager.Settings.NewConnection",
 			"org.freedesktop.NetworkManager.Settings.ConnectionRemoved":
-			return knownNetworksUpdateMsg(get_known_networks(conn))
+			// A new VPN profile is a new connection, so we refresh here too.
+			return tea.BatchMsg{
+				func() tea.Msg { return knownNetworksUpdateMsg(get_known_networks(conn)) },
+				func() tea.Msg { return vpnUpdateMsg(get_vpn_data(conn)) }, // <-- ADDED
+			}
 
 		case "org.freedesktop.NetworkManager.Device.Wireless.AccessPointAdded",
 			"org.freedesktop.NetworkManager.Device.Wireless.AccessPointRemoved":
 			return scannedNetworksUpdateMsg(nil)
 		}
-		// If we get a signal we don't care about, listen again immediately.
 		return waitForDBusSignal(conn, sig)()
 	}
 }
@@ -69,5 +72,6 @@ func refreshAllData(conn *dbus.Conn) tea.Cmd {
 		requestScan(conn),
 		func() tea.Msg { return deviceUpdateMsg(get_devices_data(conn)) },
 		func() tea.Msg { return knownNetworksUpdateMsg(get_known_networks(conn)) },
+		func() tea.Msg { return vpnUpdateMsg(get_vpn_data(conn)) }, // <-- ADDED
 	)
 }

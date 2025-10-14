@@ -167,11 +167,27 @@ func format_station_data(devices []device) [][]string {
 	return data
 }
 
-func format_known_networks_data(networks []known_network, selected_row int) [][]string {
+func format_vpn_data(vpns []vpn_connection) [][]string {
+	data := [][]string{
+		pad_headers([]string{"", "Name", "Type"}, []int{5, -1, -1}), {""},
+	}
+	for _, vpn := range vpns {
+		state := "     "
+		if (vpn.connected) {
+			state = "  >  "
+		}
+
+		row := []string{state, vpn.name, vpn.ctype}
+		data = append(data, row)
+	}
+	return data
+}
+
+func format_known_networks_data(networks []known_network, selected_row int, height int) [][]string {
 	base := [][]string{
 		pad_headers([]string{"", "Name", "Security", "Hidden", "Auto Connect", "Signal"}, []int{5, -1, 23, 5, 5, 6}), {""},
 	}
-	window := format_arrays(networks, selected_row)
+	window := format_arrays(networks, selected_row, height)
 	for _, n := range window {
 		connected := "     "
 		if n.connected {
@@ -180,37 +196,40 @@ func format_known_networks_data(networks []known_network, selected_row int) [][]
 		row := []string{connected, n.ssid, n.security, strconv.FormatBool(n.hidden), strconv.FormatBool(n.auto_connect), strconv.Itoa(n.signal) + "%"}
 		base = append(base, row)
 	}
-	for i := 0; i < 10-len(networks); i++ {
+
+	if height < 10 {
+		height--
+	}
+	for i := 0; i < height-len(networks); i++ {
 		base = append(base, []string{""})
 	}
 	return base
 }
 
-func format_scanned_networks_data(networks []scanned_network, selected_row int) [][]string {
+func format_scanned_networks_data(networks []scanned_network, selected_row int, height int) [][]string {
 	data := [][]string{
 		pad_headers([]string{"Name", "Security", "Signal"}, []int{-1, -1, -1}), {""},
 	}
-	window := format_arrays(networks, selected_row)
+	window := format_arrays(networks, selected_row, height)
 	for _, n := range window {
 		row := []string{n.ssid, n.security, strconv.Itoa(n.signal) + "%"}
 		data = append(data, row)
 	}
-	for i := 0; i < 10-len(networks); i++ {
+	for i := 0; i < height-len(networks); i++ {
 		data = append(data, []string{""})
 	}
 	return data
 }
 
-func format_arrays[arrType known_network | scanned_network](arr []arrType, selected_index int) []arrType {
-	windowSize := 10
+func format_arrays[arrType known_network | scanned_network](arr []arrType, selected_index int, window_size int) []arrType {
 	start := 0
-	if selected_index >= windowSize {
-		start = selected_index - windowSize + 1
+	if selected_index >= window_size {
+		start = selected_index - window_size + 1
 	}
-	end := start + windowSize
+	end := start + window_size
 	if end > len(arr) {
 		end = len(arr)
-		start = max(end-windowSize, 0)
+		start = max(end-window_size, 0)
 	}
 	if start > end {
 		start = end

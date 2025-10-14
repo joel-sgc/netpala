@@ -20,6 +20,7 @@ import (
 // // Message sent from our debounce timer to perform a scan.
 // type performScanRefreshMsg struct{}
 
+type vpnUpdateMsg []vpn_connection
 type deviceUpdateMsg []device
 type knownNetworksUpdateMsg []known_network
 type scannedNetworksUpdateMsg []scanned_network
@@ -33,6 +34,7 @@ type netpala_data struct {
 	selected_entry int
 	
 	device_data      []device
+	vpn_data         []vpn_connection
 	known_networks   []known_network
 	scanned_networks []scanned_network
 	status_bar 		 	 status_bar_data
@@ -76,4 +78,12 @@ type scanned_network struct {
 	ssid     string
 	security string
 	signal   int
+}
+
+type vpn_connection struct {
+	path       dbus.ObjectPath
+	activePath dbus.ObjectPath
+	name       string
+	ctype   	 string
+	connected  bool
 }

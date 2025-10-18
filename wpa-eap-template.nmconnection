@@ -1,0 +1,107 @@
+# =====================================================================
+#         NetworkManager WPA2/WPA3-Enterprise Connection Profile
+# =====================================================================
+#
+# File Location: /etc/NetworkManager/system-connections/
+# File Permissions: MUST be '600' (sudo chmod 600 <filename>)
+#                   This protects your stored credentials.
+#
+# After creating or editing, reload NetworkManager:
+# sudo nmcli connection reload
+#
+# =====================================================================
+
+# =====================================================================
+#                   PEAP with MSCHAPv2 (Most Common)
+# =====================================================================
+# eap=PEAP;
+# identity=jstudent1
+# password=MySecurePassword123
+# ca-cert=/etc/pki/tls/certs/mit_ca.pem
+# phase2-auth=mschapv2
+# domain-suffix-match=mit.edu1
+# =====================================================================
+
+[connection]
+# A human-readable name for the connection (e.g., "MIT Secure WiFi").
+id=Your-Connection-Name
+
+# A unique identifier for this connection. Generate one with `uuidgen`.
+uuid=paste-your-uuid-here
+
+# The connection type.
+type=wifi
+
+# Specify a network interface if you want to lock this profile to it (e.g., wlan0).
+# Leave blank to allow any Wi-Fi interface to use it.
+# interface-name=
+
+# Whether NetworkManager should attempt to connect automatically.
+autoconnect=true
+
+# User permissions. An empty value means any user can activate it.
+permissions=
+
+[wifi]
+# The broadcasted name of the network (Service Set Identifier).
+ssid=Your-WiFi-SSID
+
+# For typical Wi-Fi networks, this is always 'infrastructure'.
+mode=infrastructure
+
+# Tells NetworkManager to look for the security configuration below.
+security=802-11-wireless-security
+
+[802-11-wireless-security]
+# Key management protocol. For enterprise, this is always wpa-eap.
+key-mgmt=wpa-eap
+
+[802-1x]
+# ---------------------------------------------------------------------
+# EAP Authentication Settings (The most important section)
+# ---------------------------------------------------------------------
+
+# EAP Method. Common values: PEAP, TLS, TTLS.
+eap=PEAP;
+
+# Your username or identity for the network.
+identity=your_username_here
+
+# (Optional) If your network requires an anonymous outer identity.
+# Often the same as 'identity' or can be left blank.
+# anonymous-identity=
+
+# Your password.
+password=your_password_here
+
+# CA Certificate for server verification. HIGHLY RECOMMENDED.
+# This prevents you from connecting to a rogue access point.
+# Your IT department or university should provide this file.
+ca-cert=/path/to/your/ca-certificate.pem
+
+# (Recommended Security) If the server certificate has a domain subject,
+# NetworkManager will verify it matches this string.
+# Example: domain-suffix-match=serv.mit.edu
+# domain-suffix-match=
+
+# Phase 2 (inner) authentication method. Required for PEAP and TTLS.
+# The inner authentication can be PAP, MSCHAP, MSCHAPv2, etc.
+# For PEAP, this is almost always 'mschapv2'.
+phase2-auth=mschapv2
+
+# For EAP-TLS, you need a client certificate and private key.# The inner authentication can be PAP, MSCHAP, MSCHAPv2, etc.
+# client-cert=/path/to/your/client-cert.pem
+# private-key=/path/to/your/private-key.pem
+# private-key-password=your-private-key-password
+
+[ipv4]
+# 'auto' for DHCP. Other options include 'manual' for static IPs.
+method=auto
+
+[ipv6]
+# 'auto' for SLAAC/DHCPv6. 'ignore' to disable IPv6 for this connection.
+method=auto
+addr-gen-mode=stable-privacy
+
+[proxy]
+# System-wide proxy settings can be configured here if needed.

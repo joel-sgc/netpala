@@ -60,8 +60,7 @@ func get_vpn_data(c *dbus.Conn) []vpn_connection {
 		connType, _ := connTypeVar.Value().(string)
 
 		if connType == "wireguard" || connType == "vpn" {
-			nameVar, _ := connSettings["id"]
-			name, _ := nameVar.Value().(string)
+			name, _ := connSettings["id"].Value().(string)
 
 			friendlyType := "VPN"
 			if connType == "wireguard" {

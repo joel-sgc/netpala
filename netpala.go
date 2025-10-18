@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/godbus/dbus/v5"
+	overlay "github.com/rmhubbert/bubbletea-overlay"
 )
 
 // The initial command to load all data at startup.
@@ -79,8 +80,11 @@ func NetpalaModel() netpala_data {
 		known_networks:   []known_network{},
 		scanned_networks: []scanned_network{},
 		status_bar: 			StatusBarModel(),
+		form:  						WpaEapForm(),
+		tables:           tables_model{},
 
 		is_typing: false,
+		is_in_form: false,
 		initial_load_complete: false,
 	}
 }
@@ -99,7 +103,7 @@ func (m netpala_data) Init() tea.Cmd {
 
 func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-
+	
 	if m.err != nil {
 		if key, ok := msg.(tea.KeyMsg); ok {
 			switch key.String() {
@@ -110,6 +114,25 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if (m.is_in_form) {
+		var newForm tea.Model
+		newForm, cmd = m.form.Update(msg)
+		m.form = newForm.(wpa_eap_form)
+		return m, cmd
+	}
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "esc":
+			m.is_typing = false
+			m.status_bar.input.Placeholder = ""
+			m.status_bar.input.Blur()
+			m.status_bar.input.SetValue("")
+			return m, tea.Quit
+		}
+	}
+	
 	if m.is_typing {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -184,13 +207,20 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		return m, nil
+
+		var formCmd tea.Cmd
+		var newForm tea.Model
+		newForm, formCmd = m.form.Update(msg)
+		m.form = newForm.(wpa_eap_form)
+		return m, formCmd
 
 	case periodicRefreshMsg:
 		return m, refreshAllData(m.conn)
 
 	case tea.KeyMsg:
 		switch msg.String() {
+		// case "e":
+		// 	return m, openEditorCmd()
 		case "ctrl+c", "ctrl+q", "q", "ctrl+w":
 			m.conn.RemoveSignal(m.dbusSignals)
 			m.conn.Close()
@@ -228,21 +258,29 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected_box++
 			}
 		case "enter", " ":
-			if m.selected_box == 2 && len(m.vpn_data) > 0 && len(m.device_data) > 0 {
+			if (m.selected_box == 0 && len(m.device_data) > 0) {
+				// Enable/Disable Wifi Card
+				return m, toggleWifiCmd(m.conn, !m.device_data[0].powered)
+			} else if m.selected_box == 2 && len(m.vpn_data) > 0 && len(m.device_data) > 0 {
 				// Connect to VPN
-
+				
 			} else if m.selected_box == 3 && len(m.known_networks) > 0 && len(m.device_data) > 0 {
 				// Connect to known network
 				selectedNetwork := m.known_networks[m.selected_entry]
 				wifiDevice := m.device_data[0]
-				return m, connectToNetworkCmd(m.conn, selectedNetwork.path, wifiDevice.path)
-
+				return m, connectToNetworkCmd(m.conn, selectedNetwork.path, wifiDevice.path)				
 			} else if m.selected_box == 4 && len(m.scanned_networks) > 0 && len(m.device_data) > 0 {
 				// Store the selected network before entering typing mode
 				m.network_to_connect = m.scanned_networks[m.selected_entry]
-				m.is_typing = true
-				m.status_bar.input.Placeholder = "Enter Wi-Fi Password..."
-				m.status_bar.input.Focus()
+
+				if (m.network_to_connect.security == "wpa2-eap") {
+					m.is_in_form = true
+					return m, nil
+				} else {
+					m.is_typing = true
+					m.status_bar.input.Placeholder = "Enter Wi-Fi Password..."
+					m.status_bar.input.Focus()
+				}
 				return m, nil
 			}
 		}
@@ -261,17 +299,28 @@ func (m netpala_data) View() string {
 		nets_height = 8
 	}
 
-	device_table := TableModel("Device", m.selected_box == 0, m.selected_entry, -1, m.device_data, nil, nil, nil, nil)
-	station_table := TableModel("Station", m.selected_box == 1, m.selected_entry, -1, nil, m.device_data, nil, nil, nil)
-	vpn_table := TableModel("Virtual Private Networks", m.selected_box == 2, m.selected_entry, -1, nil, nil, m.vpn_data, nil, nil).View()
-	known_nets_table := TableModel("Known Networks", m.selected_box == 3, m.selected_entry, nets_height, nil, nil, nil, m.known_networks, nil)
-	scanned_nets_table := TableModel("New Networks", m.selected_box == 4, m.selected_entry, nets_height, nil, nil, nil, nil, m.scanned_networks)
-	
-	if len(m.vpn_data) == 0 {
-		vpn_table = ""
-	}
+	m.tables.selected_box = m.selected_box
+	m.tables.selected_entry = m.selected_entry
+	m.tables.nets_height = nets_height
+	m.tables.device_data = m.device_data
+	m.tables.vpn_data = m.vpn_data
+	m.tables.known_networks = m.known_networks
+	m.tables.scanned_networks = m.scanned_networks
 
-	return device_table.View() + station_table.View() + vpn_table + known_nets_table.View() + scanned_nets_table.View() + m.status_bar.View()
+	if (m.is_in_form) {
+		bgModel := &m.tables
+		fgModel := &m.form
+		xPosition := overlay.Left
+		yPosition := overlay.Center
+		xOffset := calculate_padding(m.form.View())
+		yOffset := 0
+		
+		overlayModel := overlay.New(fgModel, bgModel, xPosition, yPosition, xOffset, yOffset)
+		
+		return overlayModel.View()
+	} else {	
+		return m.tables.View() + m.status_bar.View()
+	}
 }
 
 func main() {

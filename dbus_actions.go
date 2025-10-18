@@ -99,3 +99,26 @@ func addAndConnectToNetworkCmd(conn *dbus.Conn, network scanned_network, passwor
 		return connectToNetworkCmd(conn, newConnectionPath, devicePath)()
 	}
 }
+
+func toggleWifiCmd(conn *dbus.Conn, enable bool) tea.Cmd {
+	return func() tea.Msg {
+		nm := conn.Object(nmDest, dbus.ObjectPath(nmPath))
+
+		// Call the Set method on the standard D-Bus Properties interface
+		call := nm.Call(
+			"org.freedesktop.DBus.Properties.Set",
+			0,
+			nmDest,            // The interface that owns the property
+			"WirelessEnabled", // The property to change
+			dbus.MakeVariant(enable),  // The new value (true for on, false for off)
+		)
+
+		if call.Err != nil {
+			return errMsg{fmt.Errorf("failed to set WirelessEnabled property: %w", call.Err)}
+		}
+
+		// A successful call will automatically trigger a D-Bus signal.
+		// Our existing signal listener will then refresh the device data for us.
+		return nil
+	}
+}

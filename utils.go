@@ -254,3 +254,14 @@ func (m *netpala_data) filterKnownFromScanned() {
 	}
 	m.scanned_networks = filteredScanned
 }
+
+func calculate_padding(s string) int {
+	totalWidth := window_width()
+	line := strings.Split(s, "\n")[0]
+
+	// Use lipgloss.Width to correctly calculate visible width, ignoring ANSI codes
+	textWidth := lipgloss.Width(line)
+
+	// Calculate padding and ensure it's not negative
+	return max(0, (totalWidth-textWidth)/2)
+}

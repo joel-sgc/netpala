@@ -13,6 +13,8 @@ require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/charmbracelet/bubbles v0.21.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/mritd/bubbles v0.0.0-20210825105013-cb7a572fb831 // indirect
+	github.com/rmhubbert/bubbletea-overlay v0.4.4 // indirect
 )
 
 require (

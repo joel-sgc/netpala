@@ -29,26 +29,26 @@ type periodicRefreshMsg struct{}
 type performScanRefreshMsg struct{}
 
 type netpala_data struct {
-	width, height 		int
-	selected_box  		int
-	selected_entry		int
-	
-	device_data      	[]device
-	vpn_data         	[]vpn_connection
-	known_networks   	[]known_network
-	scanned_networks 	[]scanned_network
-	tables            tables_model
-	status_bar 		 	 	status_bar_data
-	form 						 	wpa_eap_form
+	width, height  int
+	selected_box   int
+	selected_entry int
 
-	network_to_connect 	scanned_network
-	is_typing				 		bool
-	is_in_form					bool
+	device_data      []device
+	vpn_data         []vpn_connection
+	known_networks   []known_network
+	scanned_networks []scanned_network
+	tables           tables_model
+	status_bar       status_bar_data
+	form             wpa_eap_form
 
-	initial_load_complete	bool
-	conn        					*dbus.Conn
-	err         					error
-	dbusSignals 					chan *dbus.Signal
+	network_to_connect scanned_network
+	is_typing          bool
+	is_in_form         bool
+
+	initial_load_complete bool
+	conn                  *dbus.Conn
+	err                   error
+	dbusSignals           chan *dbus.Signal
 }
 
 type device struct {
@@ -87,6 +87,6 @@ type vpn_connection struct {
 	path       dbus.ObjectPath
 	activePath dbus.ObjectPath
 	name       string
-	ctype   	 string
+	ctype      string
 	connected  bool
 }

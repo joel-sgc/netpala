@@ -2,21 +2,23 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mritd/bubbles/common"
 	"github.com/mritd/bubbles/selector"
 )
 
 type wpa_eap_form struct {
-	eap_method 		selector.Model
-	phase_2_auth 	selector.Model
-	identity 			textinput.Model
-	password 			textinput.Model
-	ca_cert 			textinput.Model
-	focused  			int
+	eap_method   selector.Model
+	phase_2_auth selector.Model
+	identity     textinput.Model
+	password     textinput.Model
+	ca_cert      textinput.Model
+	focused      int
+	eap_selected bool
+	phase_2_selected bool
 }
 
 type EAPMethod struct {
@@ -42,36 +44,55 @@ func WpaEapForm() wpa_eap_form {
 	ca_cert.Placeholder = "Path to CA certificate (e.g. /etc/ssl/certs/ca.pem)"
 	ca_cert.Prompt = ""
 	ca_cert.Width = 32
-	ca_cert.CharLimit = 256
+	ca_cert.CharLimit = 512
 
 	return wpa_eap_form{
 		eap_method: selector.Model{
 			Data: []any{
-				EAPMethod{ Type: "PEAP" },
-				EAPMethod{ Type: "TTLS" },
-				EAPMethod{ Type: "TLS" },
-				EAPMethod{ Type: "PWD" },
+				EAPMethod{Type: "PEAP"},
+				EAPMethod{Type: "TTLS"},
+				EAPMethod{Type: "TLS"},
+				EAPMethod{Type: "PWD"},
 			},
-			PerPage: 4,
-			SelectedFunc: selectedFunc,
+			PerPage:        4,
+			FinishedFunc: completedFuncfunc([]string{
+				"PEAP",
+				"TTLS",
+				"TLS",
+				"PWD",
+			}),
+			SelectedFunc:   selectedFunc,
 			UnSelectedFunc: unselectedFunc,
+			HeaderFunc:     emptyFunc,
+			FooterFunc:     emptyFunc,
 		},
 		phase_2_auth: selector.Model{
 			Data: []any{
-				EAPMethod{ Type: "MSCHAPV2" },
-				EAPMethod{ Type: "PAP" },
-				EAPMethod{ Type: "CHAP" },
-				EAPMethod{ Type: "MSCHAP" },
-				EAPMethod{ Type: "NONE" },
+				EAPMethod{Type: "MSCHAPV2"},
+				EAPMethod{Type: "PAP"},
+				EAPMethod{Type: "CHAP"},
+				EAPMethod{Type: "MSCHAP"},
+				EAPMethod{Type: "NONE"},
 			},
-			PerPage: 5,
-			SelectedFunc: selectedFunc,
+			PerPage:        5,
+			FinishedFunc: completedFuncfunc([]string{
+				"MSCHAPV2",
+				"PAP",
+				"CHAP",
+				"MSCHAP",
+				"NONE",
+			}),
+			SelectedFunc:   unselectedFunc,
 			UnSelectedFunc: unselectedFunc,
+			HeaderFunc:     emptyFunc,
+			FooterFunc:     emptyFunc,
 		},
 		identity: identity,
 		password: password,
-		ca_cert: ca_cert,
+		ca_cert:  ca_cert,
 		focused:  0,
+		eap_selected: false,
+		phase_2_selected: false,
 	}
 }
 func (m wpa_eap_form) Init() tea.Cmd {
@@ -86,17 +107,19 @@ func (m wpa_eap_form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch key := msg.(type) {
 	case tea.KeyMsg:
 		switch key.String() {
+		case "enter":
+			switch m.focused {
+			case 0:
+				m.eap_selected = true
+			case 1:
+				m.phase_2_selected = true
+			}
 		// --- focus switching ---
 		case "tab", "shift+tab":
 			if key.String() == "shift+tab" {
-				m.focused--
+				m.focused = (m.focused + 4) % 5
 			} else {
-				m.focused++
-			}
-			if m.focused < 0 {
-				m.focused = 4
-			} else if m.focused > 4 {
-				m.focused = 0
+				m.focused = (m.focused + 1) % 5
 			}
 
 			// Update focus state for text inputs
@@ -105,8 +128,16 @@ func (m wpa_eap_form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ca_cert.Blur()
 
 			switch m.focused {
+			case 0:
+				m.eap_method.SelectedFunc = selectedFunc
+				m.phase_2_auth.SelectedFunc = unselectedFunc
+			case 1:
+				m.eap_method.SelectedFunc = unselectedFunc
+				m.phase_2_auth.SelectedFunc = selectedFunc
 			case 2:
 				m.identity.Focus()
+				m.eap_method.SelectedFunc = unselectedFunc
+				m.phase_2_auth.SelectedFunc = unselectedFunc
 			case 3:
 				m.password.Focus()
 			case 4:
@@ -163,15 +194,28 @@ func (m wpa_eap_form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// 3. Only pass key-press messages to the *focused* selector.
 	if _, ok := msg.(tea.KeyMsg); ok {
-		if m.focused == 0 {
+		switch m.focused {
+		case 0:
 			sm, cmd = m.eap_method.Update(msg)
 			m.eap_method = *sm
 			cmds = append(cmds, cmd)
+
+		if (msg.(tea.KeyMsg).String() == "enter") {		
+			m.focused++
+			m.eap_method.SelectedFunc = unselectedFunc
+			m.phase_2_auth.SelectedFunc = selectedFunc
 		}
-		if m.focused == 1 {
+		case 1:
 			sm, cmd = m.phase_2_auth.Update(msg)
 			m.phase_2_auth = *sm
 			cmds = append(cmds, cmd)
+
+			if (msg.(tea.KeyMsg).String() == "enter") {
+				m.eap_method.SelectedFunc = unselectedFunc
+				m.phase_2_auth.SelectedFunc = unselectedFunc
+				m.identity.Focus()
+				m.focused++
+			}
 		}
 	}
 	// --- END NEW LOGIC ---
@@ -180,46 +224,83 @@ func (m wpa_eap_form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m wpa_eap_form) View() string {
-	activeBorder := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("63")).
-		Padding(0, 1)
-
-	inactiveBorder := lipgloss.NewStyle().
+	inactiveBorderStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
+		BorderForeground(lipgloss.Color("#444a66")).
 		Padding(0, 1)
 
-	var formStyle = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder(), true).
-		BorderForeground(lipgloss.Color("63")).
+	activeBorderStyle := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("#a7abca")).
+		Padding(0, 1)
+
+	inactiveLabelStyle := lipgloss.NewStyle().
+		Bold(false).
+		Foreground(lipgloss.Color("#a7abca"))
+
+	activeLabelStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#cda162"))
+
+	formStyle := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("#9cca69")).
 		Padding(0, 1)
 
 	// Always render all text boxes, just change the style.
-	identityBox := inactiveBorder.Render(m.identity.View())
-	passwordBox := inactiveBorder.Render(m.password.View())
-	ca_certBox := inactiveBorder.Render(m.ca_cert.View())
+	eapMethodLabel := inactiveLabelStyle.Render("EAP Method:")
+	phase2Label := inactiveLabelStyle.Render("Phase 2 (inner-auth):")
 
+	identityLabel := inactiveLabelStyle.Render("Identity:")
+	identityBox := inactiveBorderStyle.Render(m.identity.View())
+
+	passwordLabel := inactiveLabelStyle.Render("\nPassword:")
+	passwordBox := inactiveBorderStyle.Render(m.password.View())
+
+	ca_certLabel := inactiveLabelStyle.Render("\nCA Certificate:")
+	ca_certBox := inactiveBorderStyle.Render(m.ca_cert.View())
+	
+	
 	switch m.focused {
+	case 0:
+		eapMethodLabel = activeLabelStyle.Render("EAP Method:")
+	case 1:
+		phase2Label = activeLabelStyle.Render("Phase 2 (inner-auth):")
 	case 2:
-		identityBox = activeBorder.Render(m.identity.View())
+		identityLabel = activeLabelStyle.Render("Identity:")
+		identityBox = activeBorderStyle.Render(m.identity.View())
 	case 3:
-		passwordBox = activeBorder.Render(m.password.View())
+		passwordLabel = activeLabelStyle.Render("\nPassword:")
+		passwordBox = activeBorderStyle.Render(m.password.View())
 	case 4:
-		ca_certBox = activeBorder.Render(m.ca_cert.View())
+		ca_certLabel = activeLabelStyle.Render("\nCA Certificate:")
+		ca_certBox = activeBorderStyle.Render(m.ca_cert.View())
 	}
 	// --- END NEW LOGIC ---
+	eap_str := strings.TrimSuffix(strings.Replace(m.eap_method.View(), "\n", "", 2), "\n")
+	phase_2_str := strings.TrimSuffix(strings.Replace(m.phase_2_auth.View(), "\n", "", 2), "\n")
+	if (m.eap_selected) {
+		eap_str = m.eap_method.View()
+	}
+	if (m.phase_2_selected) {
+		phase_2_str = m.phase_2_auth.View()
+	}
 
+	// We perform the string alterations below the remove the spacing reserved for the header and footer of the selector
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		"EAP Method:",
-		m.eap_method.View(),
-		"Phase 2 (inner-auth):",
-		m.phase_2_auth.View(),
-		"Identity:",
+		eapMethodLabel,
+		eap_str,
+		
+		phase2Label,
+		phase_2_str,
+		
+		identityLabel,
 		identityBox,
-		"\nPassword:",
+		
+		passwordLabel,
 		passwordBox,
-		"\nCA Certificate:",
+		
+		ca_certLabel,
 		ca_certBox,
 	)
 
@@ -227,11 +308,31 @@ func (m wpa_eap_form) View() string {
 }
 
 func selectedFunc(m selector.Model, obj any, gdIndex int) string {
-	t := obj.(EAPMethod)
-	return common.FontColor(fmt.Sprintf("[%d] %s", gdIndex+1, t.Type), selector.ColorSelected)
+	str := obj.(EAPMethod).Type
+	return lipgloss.NewStyle().Bold(false).Background(lipgloss.Color("#a7abca")).Foreground(lipgloss.Color("#444a66")).Render(fmt.Sprintf(" %d. %s", gdIndex+1, str))
 }
 
 func unselectedFunc(m selector.Model, obj any, gdIndex int) string {
-	t := obj.(EAPMethod)
-	return common.FontColor(fmt.Sprintf(" %d. %s", gdIndex+1, t.Type), selector.ColorUnSelected)
+	str := obj.(EAPMethod).Type
+	return lipgloss.NewStyle().Bold(false).Foreground(lipgloss.Color("#a7abca")).Render(fmt.Sprintf(" %d. %s", gdIndex+1, str))
+}
+
+func emptyFunc(m selector.Model, obj interface{}, gdIndex int) string {
+	return ""
+}
+
+func completedFuncfunc(options []string) func(selected any) string {
+	return func(selected any) string {
+		str := ""
+
+		for i, option := range options {
+			if (option == selected.(EAPMethod).Type) {
+				str += fmt.Sprintf("%s %s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("#9cca69")).Render("»"), selectedFunc(selector.Model{}, selected, i))
+			} else {
+				str += fmt.Sprintf("  %s\n", unselectedFunc(selector.Model{}, EAPMethod{ Type: option }, i))
+			}
+		}
+		
+		return str
+	}
 }

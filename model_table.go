@@ -9,10 +9,10 @@ type table_data struct {
 	title             string
 	is_table_selected bool
 	selected_row      int
-	height						int
+	height            int
 	device_data       []device
 	station_data      []device
-	vpn_data					[]vpn_connection
+	vpn_data          []vpn_connection
 	known_networks    []known_network
 	scanned_networks  []scanned_network
 }
@@ -32,10 +32,10 @@ func TableModel(
 		title:             title,
 		is_table_selected: is_table_selected,
 		selected_row:      selected_row,
-		height: 					 height,
+		height:            height,
 		device_data:       dev_data,
 		station_data:      station_data,
-		vpn_data: 				 vpn_data,
+		vpn_data:          vpn_data,
 		known_networks:    known_nets,
 		scanned_networks:  scanned_nets,
 	}

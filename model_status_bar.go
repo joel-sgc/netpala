@@ -11,9 +11,9 @@ import (
 )
 
 type keyMap struct {
-	Scan key.Binding
+	Scan   key.Binding
 	Select key.Binding
-	Quit key.Binding
+	Quit   key.Binding
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
@@ -43,10 +43,9 @@ var keys = keyMap{
 	),
 }
 
-
 type status_bar_data struct {
 	input textinput.Model
-	err       error
+	err   error
 }
 
 func StatusBarModel() status_bar_data {
@@ -99,7 +98,7 @@ func (m status_bar_data) View() string {
 	clean := ansi.ReplaceAllString(key_help, "")
 
 	total_width := window_width()
-	remaining_width := total_width - (input_len + len(clean)) - 6	// extra 6 to account for automatic padding
+	remaining_width := total_width - (input_len + len(clean)) - 6 // extra 6 to account for automatic padding
 
 	return m.input.View() + strings.Repeat(" ", max(remaining_width, 0)) + key_help
 }

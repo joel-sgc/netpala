@@ -46,9 +46,9 @@ func addAndConnectToNetworkCmd(conn *dbus.Conn, network scanned_network, passwor
 		// Base connection settings
 		settings := map[string]map[string]dbus.Variant{
 			"connection": {
-				"id":   dbus.MakeVariant(network.ssid),
-				"uuid": dbus.MakeVariant(newUUID.String()),
-				"type": dbus.MakeVariant("802-11-wireless"),
+				"id":          dbus.MakeVariant(network.ssid),
+				"uuid":        dbus.MakeVariant(newUUID.String()),
+				"type":        dbus.MakeVariant("802-11-wireless"),
 				"autoconnect": dbus.MakeVariant(true),
 			},
 			"802-11-wireless": {
@@ -108,9 +108,9 @@ func toggleWifiCmd(conn *dbus.Conn, enable bool) tea.Cmd {
 		call := nm.Call(
 			"org.freedesktop.DBus.Properties.Set",
 			0,
-			nmDest,            // The interface that owns the property
-			"WirelessEnabled", // The property to change
-			dbus.MakeVariant(enable),  // The new value (true for on, false for off)
+			nmDest,                   // The interface that owns the property
+			"WirelessEnabled",        // The property to change
+			dbus.MakeVariant(enable), // The new value (true for on, false for off)
 		)
 
 		if call.Err != nil {

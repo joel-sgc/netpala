@@ -71,20 +71,20 @@ func NetpalaModel() netpala_data {
 	}
 
 	return netpala_data{
-		conn:             conn,
-		err:              err,
-		dbusSignals:      sigChan,
-		
+		conn:        conn,
+		err:         err,
+		dbusSignals: sigChan,
+
 		device_data:      []device{},
-		vpn_data: 				[]vpn_connection{},
+		vpn_data:         []vpn_connection{},
 		known_networks:   []known_network{},
 		scanned_networks: []scanned_network{},
-		status_bar: 			StatusBarModel(),
-		form:  						WpaEapForm(),
+		status_bar:       StatusBarModel(),
+		form:             WpaEapForm(),
 		tables:           tables_model{},
 
-		is_typing: false,
-		is_in_form: false,
+		is_typing:             false,
+		is_in_form:            false,
 		initial_load_complete: false,
 	}
 }
@@ -93,7 +93,7 @@ func (m netpala_data) Init() tea.Cmd {
 	if m.err != nil {
 		return nil
 	}
-	
+
 	return tea.Batch(
 		loadInitialData(m.conn),
 		refreshTicker(),
@@ -103,7 +103,7 @@ func (m netpala_data) Init() tea.Cmd {
 
 func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	
+
 	if m.err != nil {
 		if key, ok := msg.(tea.KeyMsg); ok {
 			switch key.String() {
@@ -114,7 +114,7 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if (m.is_in_form) {
+	if m.is_in_form {
 		var newForm tea.Model
 		newForm, cmd = m.form.Update(msg)
 		m.form = newForm.(wpa_eap_form)
@@ -132,7 +132,7 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	}
-	
+
 	if m.is_typing {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -258,22 +258,22 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected_box++
 			}
 		case "enter", " ":
-			if (m.selected_box == 0 && len(m.device_data) > 0) {
+			if m.selected_box == 0 && len(m.device_data) > 0 {
 				// Enable/Disable Wifi Card
 				return m, toggleWifiCmd(m.conn, !m.device_data[0].powered)
 			} else if m.selected_box == 2 && len(m.vpn_data) > 0 && len(m.device_data) > 0 {
 				// Connect to VPN
-				
+
 			} else if m.selected_box == 3 && len(m.known_networks) > 0 && len(m.device_data) > 0 {
 				// Connect to known network
 				selectedNetwork := m.known_networks[m.selected_entry]
 				wifiDevice := m.device_data[0]
-				return m, connectToNetworkCmd(m.conn, selectedNetwork.path, wifiDevice.path)				
+				return m, connectToNetworkCmd(m.conn, selectedNetwork.path, wifiDevice.path)
 			} else if m.selected_box == 4 && len(m.scanned_networks) > 0 && len(m.device_data) > 0 {
 				// Store the selected network before entering typing mode
 				m.network_to_connect = m.scanned_networks[m.selected_entry]
 
-				if (m.network_to_connect.security == "wpa2-eap") {
+				if m.network_to_connect.security == "wpa2-eap" {
 					m.is_in_form = true
 					return m, nil
 				} else {
@@ -287,7 +287,6 @@ func (m netpala_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
-
 
 func (m netpala_data) View() string {
 	if m.err != nil {
@@ -307,18 +306,18 @@ func (m netpala_data) View() string {
 	m.tables.known_networks = m.known_networks
 	m.tables.scanned_networks = m.scanned_networks
 
-	if (m.is_in_form) {
+	if m.is_in_form {
 		bgModel := &m.tables
 		fgModel := &m.form
 		xPosition := overlay.Left
 		yPosition := overlay.Center
 		xOffset := calculate_padding(m.form.View())
 		yOffset := 0
-		
+
 		overlayModel := overlay.New(fgModel, bgModel, xPosition, yPosition, xOffset, yOffset)
-		
+
 		return overlayModel.View()
-	} else {	
+	} else {
 		return m.tables.View() + m.status_bar.View()
 	}
 }

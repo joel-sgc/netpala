@@ -173,7 +173,7 @@ func format_vpn_data(vpns []vpn_connection) [][]string {
 	}
 	for _, vpn := range vpns {
 		state := "     "
-		if (vpn.connected) {
+		if vpn.connected {
 			state = "  >  "
 		}
 

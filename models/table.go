@@ -1,6 +1,8 @@
 package models
 
 import (
+	"netpala/common"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss/table"
 )
@@ -10,11 +12,11 @@ type TableData struct {
 	isTableSelected bool
 	selectedRow     int
 	height          int
-	deviceData      []Device
-	stationData     []Device
-	vpnData         []VpnConnection
-	knownNetworks   []KnownNetwork
-	scannedNetworks []ScannedNetwork
+	deviceData      []common.Device
+	stationData     []common.Device
+	vpnData         []common.VpnConnection
+	knownNetworks   []common.KnownNetwork
+	scannedNetworks []common.ScannedNetwork
 }
 
 func TableModel(
@@ -22,11 +24,11 @@ func TableModel(
 	isTableSelected bool,
 	selectedRow int,
 	height int,
-	devData []Device,
-	stationData []Device,
-	vpnData []VpnConnection,
-	knownNets []KnownNetwork,
-	scannedNets []ScannedNetwork,
+	devData []common.Device,
+	stationData []common.Device,
+	vpnData []common.VpnConnection,
+	knownNets []common.KnownNetwork,
+	scannedNets []common.ScannedNetwork,
 ) TableData {
 	return TableData{
 		title:           title,
@@ -50,30 +52,30 @@ func (m TableData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m TableData) View() string {
-	borderStyle := inactiveBorderStyle
+	borderStyle := common.InactiveBorderStyle
 	if m.isTableSelected {
-		borderStyle = activeBorderStyle
+		borderStyle = common.ActiveBorderStyle
 	}
 
 	var tableData [][]string
 	if m.deviceData != nil {
-		tableData = formatDeviceData(m.deviceData)
+		tableData = common.FormatDeviceData(m.deviceData)
 	} else if m.stationData != nil {
-		tableData = formatStationData(m.stationData)
+		tableData = common.FormatStationData(m.stationData)
 	} else if m.vpnData != nil {
-		tableData = formatVpnData(m.vpnData)
+		tableData = common.FormatVpnData(m.vpnData)
 	} else if m.knownNetworks != nil {
-		tableData = formatKnownNetworksData(m.knownNetworks, m.selectedRow, m.height)
+		tableData = common.FormatKnownNetworksData(m.knownNetworks, m.selectedRow, m.height)
 	} else {
-		tableData = formatScannedNetworksData(m.scannedNetworks, m.selectedRow, m.height)
+		tableData = common.FormatScannedNetworksData(m.scannedNetworks, m.selectedRow, m.height)
 	}
 
 	table := table.New().
-		Border(boxBorder).
+		Border(common.BoxBorder).
 		BorderColumn(false).
 		BorderStyle(borderStyle).
-		StyleFunc(boxStyle(m.selectedRow, m.isTableSelected)).
+		StyleFunc(common.BoxStyle(m.selectedRow, m.isTableSelected)).
 		Rows(tableData...)
 
-	return (calcTitle(m.title, m.isTableSelected) + table.Render()) + "\n"
+	return (common.CalcTitle(m.title, m.isTableSelected) + table.Render()) + "\n"
 }

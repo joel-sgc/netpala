@@ -1,28 +1,28 @@
-package main
+package network
 
 import (
 	"fmt"
-	"netpala/models"
+	"netpala/common"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
 )
 
 const (
-	nmDest        = "org.freedesktop.NetworkManager"
-	nmPath        = "/org/freedesktop/NetworkManager"
-	propsIF       = "org.freedesktop.DBus.Properties"
-	devIF         = "org.freedesktop.NetworkManager.Device"
-	wifiIF        = "org.freedesktop.NetworkManager.Device.Wireless"
-	accessPointIF = "org.freedesktop.NetworkManager.AccessPoint"
+	NMDest        = "org.freedesktop.NetworkManager"
+	NMPath        = "/org/freedesktop/NetworkManager"
+	PropsIF       = "org.freedesktop.DBus.Properties"
+	DevIF         = "org.freedesktop.NetworkManager.Device"
+	WifiIF        = "org.freedesktop.NetworkManager.Device.Wireless"
+	AccessPointIF = "org.freedesktop.NetworkManager.AccessPoint"
 )
 
-func getDevicesData(c *dbus.Conn) []models.Device {
-	var devicesList []models.Device
-	nm := c.Object(nmDest, dbus.ObjectPath(nmPath))
-	p := getProps(nm, nmDest)
+func GetDevicesData(c *dbus.Conn) []common.Device {
+	var devicesList []common.Device
+	nm := c.Object(NMDest, dbus.ObjectPath(NMPath))
+	p := GetProps(nm, NMDest)
 
-	settingsObj := c.Object(nmDest, "/org/freedesktop/NetworkManager/Settings")
+	settingsObj := c.Object(NMDest, "/org/freedesktop/NetworkManager/Settings")
 	var connPaths []dbus.ObjectPath
 	_ = settingsObj.Call("org.freedesktop.NetworkManager.Settings.ListConnections", 0).Store(&connPaths)
 
@@ -50,11 +50,11 @@ func getDevicesData(c *dbus.Conn) []models.Device {
 	}
 
 	var devs []dbus.ObjectPath
-	nm.Call(nmDest+".GetDevices", 0).Store(&devs)
+	nm.Call(NMDest+".GetDevices", 0).Store(&devs)
 
 	for _, d := range devs {
-		obj := c.Object(nmDest, d)
-		dp := getProps(obj, devIF)
+		obj := c.Object(NMDest, d)
+		dp := GetProps(obj, DevIF)
 		if dp["DeviceType"].Value().(uint32) != 2 {
 			continue
 		}
@@ -74,7 +74,7 @@ func getDevicesData(c *dbus.Conn) []models.Device {
 
 		iface := dp["Interface"].Value().(string)
 		mac := strings.ToLower(dp["HwAddress"].Value().(string))
-		wp := getProps(obj, wifiIF)
+		wp := GetProps(obj, WifiIF)
 		mode := wp["Mode"].Value().(uint32)
 		ap := wp["ActiveAccessPoint"].Value().(dbus.ObjectPath)
 
@@ -85,7 +85,7 @@ func getDevicesData(c *dbus.Conn) []models.Device {
 
 		bssid, frequency, security := "-", 0, "-"
 		if ap != "/" {
-			apObj := c.Object(nmDest, ap)
+			apObj := c.Object(NMDest, ap)
 			if bssidVar, err := apObj.GetProperty("org.freedesktop.NetworkManager.AccessPoint.HwAddress"); err == nil {
 				bssid = bssidVar.Value().(string)
 			}
@@ -98,7 +98,7 @@ func getDevicesData(c *dbus.Conn) []models.Device {
 				activeSSID = strings.TrimRight(string(b), "\x00")
 			}
 			for _, cpath := range connPaths {
-				cobj := c.Object(nmDest, cpath)
+				cobj := c.Object(NMDest, cpath)
 				var settings map[string]map[string]dbus.Variant
 				if cobj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSettings", 0).Store(&settings) != nil {
 					continue
@@ -118,7 +118,7 @@ func getDevicesData(c *dbus.Conn) []models.Device {
 			modeStr = fmt.Sprintf("%d", mode)
 		}
 
-		devicesList = append(devicesList, models.Device{
+		devicesList = append(devicesList, common.Device{
 			Path: d,
 			Name: iface, Mode: modeStr,
 			Powered:      p["WirelessEnabled"].Value().(bool) && p["WirelessHardwareEnabled"].Value().(bool),

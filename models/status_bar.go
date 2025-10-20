@@ -1,6 +1,7 @@
 package models
 
 import (
+	"netpala/common"
 	"regexp"
 	"strings"
 
@@ -74,7 +75,7 @@ func (m StatusBarData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	// We handle errors just like any other message
-	case ErrMsg:
+	case common.ErrMsg:
 		return m, nil
 	}
 
@@ -97,7 +98,7 @@ func (m StatusBarData) View() string {
 	ansi := regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 	clean := ansi.ReplaceAllString(keyHelp, "")
 
-	totalWidth := windowWidth()
+	totalWidth := common.WindowWidth()
 	remainingWidth := totalWidth - (inputLen + len(clean)) - 6 // extra 6 to account for automatic padding
 
 	return m.Input.View() + strings.Repeat(" ", max(remainingWidth, 0)) + keyHelp

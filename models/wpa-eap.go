@@ -11,13 +11,13 @@ import (
 )
 
 type WpaEapForm struct {
-	eapMethod   selector.Model
-	phase2Auth selector.Model
-	identity     textinput.Model
-	password     textinput.Model
-	caCert      textinput.Model
-	focused      int
-	eapSelected bool
+	eapMethod      selector.Model
+	phase2Auth     selector.Model
+	identity       textinput.Model
+	password       textinput.Model
+	caCert         textinput.Model
+	focused        int
+	eapSelected    bool
 	phase2Selected bool
 }
 
@@ -54,7 +54,7 @@ func ModelWpaEapForm() WpaEapForm {
 				EAPMethod{Type: "TLS"},
 				EAPMethod{Type: "PWD"},
 			},
-			PerPage:        4,
+			PerPage: 4,
 			FinishedFunc: completedFunc([]string{
 				"PEAP",
 				"TTLS",
@@ -74,7 +74,7 @@ func ModelWpaEapForm() WpaEapForm {
 				EAPMethod{Type: "MSCHAP"},
 				EAPMethod{Type: "NONE"},
 			},
-			PerPage:        5,
+			PerPage: 5,
 			FinishedFunc: completedFunc([]string{
 				"MSCHAPV2",
 				"PAP",
@@ -87,11 +87,11 @@ func ModelWpaEapForm() WpaEapForm {
 			HeaderFunc:     emptyFunc,
 			FooterFunc:     emptyFunc,
 		},
-		identity: identity,
-		password: password,
-		caCert:  caCert,
-		focused:  0,
-		eapSelected: false,
+		identity:       identity,
+		password:       password,
+		caCert:         caCert,
+		focused:        0,
+		eapSelected:    false,
 		phase2Selected: false,
 	}
 }

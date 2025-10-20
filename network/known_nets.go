@@ -1,15 +1,15 @@
-package main
+package network
 
 import (
-	"netpala/models"
+	"netpala/common"
 	"sort"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
 )
 
-func getKnownNetworks(conn *dbus.Conn) []models.KnownNetwork {
-	nm := conn.Object(nmDest, "/org/freedesktop/NetworkManager")
+func GetKnownNetworks(conn *dbus.Conn) []common.KnownNetwork {
+	nm := conn.Object(NMDest, "/org/freedesktop/NetworkManager")
 
 	ssidStr := func(v dbus.Variant) string {
 		if b, ok := v.Value().([]byte); ok {
@@ -18,18 +18,18 @@ func getKnownNetworks(conn *dbus.Conn) []models.KnownNetwork {
 		return ""
 	}
 
-	aps := map[string]models.KnownNetwork{}
+	aps := map[string]common.KnownNetwork{}
 	var devs []dbus.ObjectPath
-	_ = nm.Call(nmDest+".GetDevices", 0).Store(&devs)
+	_ = nm.Call(NMDest+".GetDevices", 0).Store(&devs)
 	for _, d := range devs {
-		obj := conn.Object(nmDest, d)
+		obj := conn.Object(NMDest, d)
 		if t, _ := obj.GetProperty("org.freedesktop.NetworkManager.Device.DeviceType"); t.Value().(uint32) != 2 {
 			continue
 		}
 		if apsVar, err := obj.GetProperty("org.freedesktop.NetworkManager.Device.Wireless.AccessPoints"); err == nil {
 			if paths, ok := apsVar.Value().([]dbus.ObjectPath); ok {
 				for _, ap := range paths {
-					apObj := conn.Object(nmDest, ap)
+					apObj := conn.Object(NMDest, ap)
 					ssidVar, _ := apObj.GetProperty("org.freedesktop.NetworkManager.AccessPoint.Ssid")
 					ss := ssidStr(ssidVar)
 					if ss == "" {
@@ -44,7 +44,7 @@ func getKnownNetworks(conn *dbus.Conn) []models.KnownNetwork {
 						bssid = hw.Value().(string)
 					}
 					if old, ok := aps[ss]; !ok || str > old.Signal {
-						aps[ss] = models.KnownNetwork{SSID: ss, Signal: str, BSSID: bssid}
+						aps[ss] = common.KnownNetwork{SSID: ss, Signal: str, BSSID: bssid}
 					}
 				}
 			}
@@ -52,13 +52,13 @@ func getKnownNetworks(conn *dbus.Conn) []models.KnownNetwork {
 	}
 
 	for _, d := range devs {
-		obj := conn.Object(nmDest, d)
+		obj := conn.Object(NMDest, d)
 		if t, _ := obj.GetProperty("org.freedesktop.NetworkManager.Device.DeviceType"); t.Value().(uint32) != 2 {
 			continue
 		}
 		if apVar, err := obj.GetProperty("org.freedesktop.NetworkManager.Device.Wireless.ActiveAccessPoint"); err == nil {
 			if apPath, ok := apVar.Value().(dbus.ObjectPath); ok && apPath != "/" {
-				apObj := conn.Object(nmDest, apPath)
+				apObj := conn.Object(NMDest, apPath)
 				ssidVar, _ := apObj.GetProperty("org.freedesktop.NetworkManager.AccessPoint.Ssid")
 				ss := ssidStr(ssidVar)
 				if ss != "" {
@@ -70,13 +70,13 @@ func getKnownNetworks(conn *dbus.Conn) []models.KnownNetwork {
 		}
 	}
 
-	setObj := conn.Object(nmDest, "/org/freedesktop/NetworkManager/Settings")
+	setObj := conn.Object(NMDest, "/org/freedesktop/NetworkManager/Settings")
 	var conns []dbus.ObjectPath
 	_ = setObj.Call("org.freedesktop.NetworkManager.Settings.ListConnections", 0).Store(&conns)
 
-	var known []models.KnownNetwork
+	var known []common.KnownNetwork
 	for _, c := range conns {
-		cobj := conn.Object(nmDest, c)
+		cobj := conn.Object(NMDest, c)
 		var s map[string]map[string]dbus.Variant
 		if cobj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSettings", 0).Store(&s) != nil {
 			continue
@@ -119,7 +119,7 @@ func getKnownNetworks(conn *dbus.Conn) []models.KnownNetwork {
 			}
 		}
 		apInfo := aps[ss]
-		known = append(known, models.KnownNetwork{
+		known = append(known, common.KnownNetwork{
 
 			Path: c, SSID: ss, Security: sec, Connected: apInfo.Connected, Hidden: hidden,
 			AutoConnect: auto, Signal: apInfo.Signal, BSSID: apInfo.BSSID,

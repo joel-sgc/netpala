@@ -1,4 +1,4 @@
-package models
+package common
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"golang.org/x/term"
 )
 
-func windowWidth() int {
+func WindowWidth() int {
 	width, _, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
 		return 80
@@ -35,7 +35,7 @@ func padHeaders(headers []string, headersLengths []int) []string {
 	if len(headers) == 0 {
 		return headers
 	}
-	totalWidth := max(windowWidth()-2, 1)
+	totalWidth := max(WindowWidth()-2, 1)
 	numHeaders := len(headers)
 	fixedTotal := 0
 	var flexibleIndices []int
@@ -85,14 +85,14 @@ func padHeaders(headers []string, headersLengths []int) []string {
 	return headers
 }
 
-func calcTitle(title string, selected bool) string {
+func CalcTitle(title string, selected bool) string {
 	color := "#a7abca"
 	bold := false
 	if selected {
 		color = "#9cca69"
 		bold = true
 	}
-	width := windowWidth()
+	width := WindowWidth()
 	repeatCount := max(width-4-len(title), 0)
 	return lipgloss.NewStyle().
 		Bold(bold).
@@ -101,14 +101,14 @@ func calcTitle(title string, selected bool) string {
 		Render(fmt.Sprintf("┌ %s %s┐", title, strings.Repeat("─", repeatCount)))
 }
 
-var boxBorder = lipgloss.Border{
+var BoxBorder = lipgloss.Border{
 	Bottom: "─", Left: "│", Right: "│",
 	BottomLeft: "└", BottomRight: "┘",
 }
-var activeBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#9cca69"))
-var inactiveBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#a7abca"))
+var ActiveBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#9cca69"))
+var InactiveBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#a7abca"))
 
-func boxStyle(selectedRow int, selectedBox bool) func(row, col int) lipgloss.Style {
+func BoxStyle(selectedRow int, selectedBox bool) func(row, col int) lipgloss.Style {
 	return func(row int, col int) lipgloss.Style {
 		switch {
 		case row == 0:
@@ -132,7 +132,7 @@ func boxStyle(selectedRow int, selectedBox bool) func(row, col int) lipgloss.Sty
 	}
 }
 
-func formatDeviceData(devices []Device) [][]string {
+func FormatDeviceData(devices []Device) [][]string {
 	data := [][]string{
 		padHeaders([]string{"Name", "Mode", "Powered", "Status"}, []int{-1, -1, -1, -1}), {""},
 	}
@@ -147,7 +147,7 @@ func formatDeviceData(devices []Device) [][]string {
 	return data
 }
 
-func formatStationData(devices []Device) [][]string {
+func FormatStationData(devices []Device) [][]string {
 	data := [][]string{
 		padHeaders([]string{"State", "Scanning", "Frequency", "Security"}, []int{-1, -1, -1, -1}), {""},
 	}
@@ -167,7 +167,7 @@ func formatStationData(devices []Device) [][]string {
 	return data
 }
 
-func formatVpnData(vpns []VpnConnection) [][]string {
+func FormatVpnData(vpns []VpnConnection) [][]string {
 	data := [][]string{
 		padHeaders([]string{"", "Name", "Type"}, []int{5, -1, -1}), {""},
 	}
@@ -183,11 +183,11 @@ func formatVpnData(vpns []VpnConnection) [][]string {
 	return data
 }
 
-func formatKnownNetworksData(networks []KnownNetwork, selectedRow int, height int) [][]string {
+func FormatKnownNetworksData(networks []KnownNetwork, selectedRow int, height int) [][]string {
 	base := [][]string{
 		padHeaders([]string{"", "Name", "Security", "Hidden", "Auto Connect", "Signal"}, []int{5, -1, 23, 5, 5, 6}), {""},
 	}
-	window := formatArrays(networks, selectedRow, height)
+	window := FormatArrays(networks, selectedRow, height)
 	for _, n := range window {
 		connected := "     "
 		if n.Connected {
@@ -206,11 +206,11 @@ func formatKnownNetworksData(networks []KnownNetwork, selectedRow int, height in
 	return base
 }
 
-func formatScannedNetworksData(networks []ScannedNetwork, selectedRow int, height int) [][]string {
+func FormatScannedNetworksData(networks []ScannedNetwork, selectedRow int, height int) [][]string {
 	data := [][]string{
 		padHeaders([]string{"Name", "Security", "Signal"}, []int{-1, -1, -1}), {""},
 	}
-	window := formatArrays(networks, selectedRow, height)
+	window := FormatArrays(networks, selectedRow, height)
 	for _, n := range window {
 		row := []string{n.SSID, n.Security, strconv.Itoa(n.Signal) + "%"}
 		data = append(data, row)
@@ -221,7 +221,7 @@ func formatScannedNetworksData(networks []ScannedNetwork, selectedRow int, heigh
 	return data
 }
 
-func formatArrays[ArrType KnownNetwork | ScannedNetwork](arr []ArrType, selectedIndex int, windowSize int) []ArrType {
+func FormatArrays[ArrType KnownNetwork | ScannedNetwork](arr []ArrType, selectedIndex int, windowSize int) []ArrType {
 	start := 0
 	if selectedIndex >= windowSize {
 		start = selectedIndex - windowSize + 1
@@ -238,7 +238,7 @@ func formatArrays[ArrType KnownNetwork | ScannedNetwork](arr []ArrType, selected
 }
 
 func CalculatePadding(s string) int {
-	totalWidth := windowWidth()
+	totalWidth := WindowWidth()
 	line := strings.Split(s, "\n")[0]
 
 	// Use lipgloss.Width to correctly calculate visible width, ignoring ANSI codes

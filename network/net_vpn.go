@@ -1,21 +1,21 @@
-package main
+package network
 
 import (
 	"fmt"
-	"netpala/models"
+	"netpala/common"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
 )
 
-func getVpnData(c *dbus.Conn) []models.VpnConnection {
-	var vpnList []models.VpnConnection
+func GetVpnData(c *dbus.Conn) []common.VpnConnection {
+	var vpnList []common.VpnConnection
 
-	nm := c.Object(nmDest, nmPath)
-	settingsObj := c.Object(nmDest, "/org/freedesktop/NetworkManager/Settings")
+	nm := c.Object(NMDest, NMPath)
+	settingsObj := c.Object(NMDest, "/org/freedesktop/NetworkManager/Settings")
 
 	// 1. Get all active connections and map the saved path to the active path.
-	activeConnPathsVariant, err := nm.GetProperty(nmDest + ".ActiveConnections")
+	activeConnPathsVariant, err := nm.GetProperty(NMDest + ".ActiveConnections")
 	if err != nil {
 		fmt.Printf("Error getting active connections: %v\n", err)
 		return nil
@@ -24,7 +24,7 @@ func getVpnData(c *dbus.Conn) []models.VpnConnection {
 	// Map a saved connection path to its active connection path
 	activeConnections := make(map[dbus.ObjectPath]dbus.ObjectPath)
 	for _, acPath := range activeConnPaths {
-		acObj := c.Object(nmDest, acPath)
+		acObj := c.Object(NMDest, acPath)
 		connProp, err := acObj.GetProperty("org.freedesktop.NetworkManager.Connection.Active.Connection")
 		if err == nil {
 			if connPath, ok := connProp.Value().(dbus.ObjectPath); ok {
@@ -42,7 +42,7 @@ func getVpnData(c *dbus.Conn) []models.VpnConnection {
 
 	// 3. Iterate through saved connections and find the VPNs.
 	for _, path := range savedConnPaths {
-		connObj := c.Object(nmDest, path)
+		connObj := c.Object(NMDest, path)
 		var settings map[string]map[string]dbus.Variant
 		if err := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSettings", 0).Store(&settings); err != nil {
 			continue
@@ -77,7 +77,7 @@ func getVpnData(c *dbus.Conn) []models.VpnConnection {
 			// Check if this connection is active and get its active path.
 			activePath, isConnected := activeConnections[path]
 
-			vpnList = append(vpnList, models.VpnConnection{
+			vpnList = append(vpnList, common.VpnConnection{
 				Path:       path,
 				ActivePath: activePath, // Store the active path
 				Name:       name,

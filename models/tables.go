@@ -1,6 +1,7 @@
 package models
 
 import (
+	"netpala/common"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,10 +13,10 @@ type TablesModel struct {
 	SelectedBox     int
 	SelectedEntry   int
 	NetsHeight      int
-	DeviceData      []Device
-	VpnData         []VpnConnection
-	KnownNetworks   []KnownNetwork
-	ScannedNetworks []ScannedNetwork
+	DeviceData      []common.Device
+	VpnData         []common.VpnConnection
+	KnownNetworks   []common.KnownNetwork
+	ScannedNetworks []common.ScannedNetwork
 }
 
 func (m TablesModel) Init() tea.Cmd {

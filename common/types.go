@@ -1,4 +1,4 @@
-package models
+package common
 
 import (
 	"github.com/godbus/dbus/v5"
@@ -42,14 +42,14 @@ type Device struct {
 }
 
 type KnownNetwork struct {
-	Path         dbus.ObjectPath
-	BSSID        string
-	SSID         string
-	Security     string
-	Hidden       bool
+	Path        dbus.ObjectPath
+	BSSID       string
+	SSID        string
+	Security    string
+	Hidden      bool
 	AutoConnect bool
-	Signal       int
-	Connected    bool
+	Signal      int
+	Connected   bool
 }
 
 type ScannedNetwork struct {

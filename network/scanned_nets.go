@@ -1,43 +1,43 @@
-package main
+package network
 
 import (
 	"fmt"
-	"netpala/models"
+	"netpala/common"
 	"sort"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
 )
 
-func getProps(o dbus.BusObject, iface string) map[string]dbus.Variant {
+func GetProps(o dbus.BusObject, iface string) map[string]dbus.Variant {
 	var m map[string]dbus.Variant
-	o.Call(propsIF+".GetAll", 0, iface).Store(&m)
+	o.Call(PropsIF+".GetAll", 0, iface).Store(&m)
 	return m
 }
 
-func getScannedNetworks(c *dbus.Conn) []models.ScannedNetwork {
-	nm := c.Object(nmDest, dbus.ObjectPath(nmPath))
+func GetScannedNetworks(c *dbus.Conn) []common.ScannedNetwork {
+	nm := c.Object(NMDest, dbus.ObjectPath(NMPath))
 	var devPaths []dbus.ObjectPath
-	if err := nm.Call(nmDest+".GetDevices", 0).Store(&devPaths); err != nil {
+	if err := nm.Call(NMDest+".GetDevices", 0).Store(&devPaths); err != nil {
 		fmt.Printf("failed to get devices: %v", err)
 	}
 
-	var allNetworks []models.ScannedNetwork
+	var allNetworks []common.ScannedNetwork
 	for _, devPath := range devPaths {
-		devObj := c.Object(nmDest, devPath)
-		devProps := getProps(devObj, devIF)
+		devObj := c.Object(NMDest, devPath)
+		devProps := GetProps(devObj, DevIF)
 		if devProps["DeviceType"].Value().(uint32) != 2 {
 			continue
 		}
 
 		var apPaths []dbus.ObjectPath
-		if err := devObj.Call(wifiIF+".GetAllAccessPoints", 0).Store(&apPaths); err != nil {
+		if err := devObj.Call(WifiIF+".GetAllAccessPoints", 0).Store(&apPaths); err != nil {
 			fmt.Printf("failed to get access points: %v", err)
 		}
 
 		for _, apPath := range apPaths {
-			apObj := c.Object(nmDest, apPath)
-			apProps := getProps(apObj, accessPointIF)
+			apObj := c.Object(NMDest, apPath)
+			apProps := GetProps(apObj, AccessPointIF)
 
 			var ssid string
 			if ssidVal, ok := apProps["Ssid"]; ok {
@@ -58,7 +58,7 @@ func getScannedNetworks(c *dbus.Conn) []models.ScannedNetwork {
 				signal = int(strengthVal.Value().(byte))
 			}
 
-			ap := c.Object(nmDest, apPath)
+			ap := c.Object(NMDest, apPath)
 			wpaFlagsVar, _ := ap.GetProperty("org.freedesktop.NetworkManager.AccessPoint.WpaFlags")
 			rsnFlagsVar, _ := ap.GetProperty("org.freedesktop.NetworkManager.AccessPoint.RsnFlags")
 			var wpaFlags, rsnFlags uint32
@@ -69,7 +69,7 @@ func getScannedNetworks(c *dbus.Conn) []models.ScannedNetwork {
 				rsnFlags = val
 			}
 
-			allNetworks = append(allNetworks, models.ScannedNetwork{
+			allNetworks = append(allNetworks, common.ScannedNetwork{
 				SSID:     ssid,
 				BSSID:    bssid,
 				Security: getSecurityType(wpaFlags, rsnFlags),
@@ -112,8 +112,8 @@ func getSecurityType(wpaFlags, rsnFlags uint32) string {
 	return strings.Join(security, " / ")
 }
 
-func removeDuplicates(networks []models.ScannedNetwork) []models.ScannedNetwork {
-	networkMap := make(map[string]models.ScannedNetwork)
+func removeDuplicates(networks []common.ScannedNetwork) []common.ScannedNetwork {
+	networkMap := make(map[string]common.ScannedNetwork)
 	for _, network := range networks {
 		existing, exists := networkMap[network.SSID]
 		if !exists || network.Signal > existing.Signal {
@@ -121,7 +121,7 @@ func removeDuplicates(networks []models.ScannedNetwork) []models.ScannedNetwork 
 		}
 	}
 
-	var result []models.ScannedNetwork
+	var result []common.ScannedNetwork
 	for _, network := range networkMap {
 		result = append(result, network)
 	}

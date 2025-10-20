@@ -2,46 +2,49 @@ package main
 
 import (
 	"fmt"
+	"netpala/common"
+	"netpala/dbus"
 	"netpala/models"
+	"netpala/network"
 	"os"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/godbus/dbus/v5"
+	godbus "github.com/godbus/dbus/v5"
 	overlay "github.com/rmhubbert/bubbletea-overlay"
 )
 
 type NetpalaData struct {
 	Width, Height int
-	selectedBox  	int
-	SelectedEntry	int
+	selectedBox   int
+	SelectedEntry int
 
-	DeviceData      []models.Device
-	VpnData         []models.VpnConnection
-	KnownNetworks   []models.KnownNetwork
-	ScannedNetworks []models.ScannedNetwork
+	DeviceData      []common.Device
+	VpnData         []common.VpnConnection
+	KnownNetworks   []common.KnownNetwork
+	ScannedNetworks []common.ScannedNetwork
 	Tables          models.TablesModel
 	StatusBar       models.StatusBarData
 	Form            models.WpaEapForm
 
-	NetworkToConnect models.ScannedNetwork
+	NetworkToConnect common.ScannedNetwork
 	IsTyping         bool
 	IsInForm         bool
 
 	InitialLoadComplete bool
-	Conn                *dbus.Conn
+	Conn                *godbus.Conn
 	Err                 error
-	DBusSignals         chan *dbus.Signal
+	DBusSignals         chan *godbus.Signal
 }
 
 // The initial command to load all data at startup.
-func loadInitialData(Conn *dbus.Conn) tea.Cmd {
+func loadInitialData(Conn *godbus.Conn) tea.Cmd {
 	return func() tea.Msg {
 		// Step 1: Fetch all data first to ensure we have both lists.
-		devices := getDevicesData(Conn)
-		vpns := getVpnData(Conn)
-		known := getKnownNetworks(Conn)
-		scanned := getScannedNetworks(Conn)
+		devices := network.GetDevicesData(Conn)
+		vpns := network.GetVpnData(Conn)
+		known := network.GetKnownNetworks(Conn)
+		scanned := network.GetScannedNetworks(Conn)
 
 		// Step 2: Perform the filtering logic on the initial data.
 		knownSSIDs := make(map[string]struct{})
@@ -49,7 +52,7 @@ func loadInitialData(Conn *dbus.Conn) tea.Cmd {
 			knownSSIDs[k.SSID] = struct{}{}
 		}
 
-		var filteredScanned []models.ScannedNetwork
+		var filteredScanned []common.ScannedNetwork
 		for _, s := range scanned {
 			if _, exists := knownSSIDs[s.SSID]; !exists {
 				filteredScanned = append(filteredScanned, s)
@@ -58,10 +61,10 @@ func loadInitialData(Conn *dbus.Conn) tea.Cmd {
 
 		// Step 3: Send the final, filtered data to the UI in a single batch.
 		return tea.BatchMsg{
-			func() tea.Msg { return models.DeviceUpdateMsg(devices) },
-			func() tea.Msg { return models.KnownNetworksUpdateMsg(known) },
-			func() tea.Msg { return models.ScannedNetworksUpdateMsg(filteredScanned) },
-			func() tea.Msg { return models.VpnUpdateMsg(vpns) },
+			func() tea.Msg { return common.DeviceUpdateMsg(devices) },
+			func() tea.Msg { return common.KnownNetworksUpdateMsg(known) },
+			func() tea.Msg { return common.ScannedNetworksUpdateMsg(filteredScanned) },
+			func() tea.Msg { return common.VpnUpdateMsg(vpns) },
 		}
 	}
 }
@@ -75,7 +78,7 @@ func (m *NetpalaData) FilterKnownFromScanned() {
 
 	// Build a new slice containing only the networks we want to keep.
 	// This is more efficient than deleting elements from the slice in-place.
-	var filteredScanned []models.ScannedNetwork
+	var filteredScanned []common.ScannedNetwork
 	for _, scanned := range m.ScannedNetworks {
 		if _, exists := knownSSIDs[scanned.SSID]; !exists {
 			filteredScanned = append(filteredScanned, scanned)
@@ -85,12 +88,12 @@ func (m *NetpalaData) FilterKnownFromScanned() {
 }
 
 func NetpalaModel() NetpalaData {
-	Conn, err := dbus.SystemBus()
+	Conn, err := godbus.SystemBus()
 	if err != nil {
 		return NetpalaData{Err: fmt.Errorf("failed to Connect to D-Bus: %w", err)}
 	}
 
-	sigChan := make(chan *dbus.Signal, 10)
+	sigChan := make(chan *godbus.Signal, 10)
 	Conn.Signal(sigChan)
 
 	rules := []string{
@@ -117,16 +120,16 @@ func NetpalaModel() NetpalaData {
 		Err:         err,
 		DBusSignals: sigChan,
 
-		DeviceData:      []models.Device{},
-		VpnData:         []models.VpnConnection{},
-		KnownNetworks:   []models.KnownNetwork{},
-		ScannedNetworks: []models.ScannedNetwork{},
+		DeviceData:      []common.Device{},
+		VpnData:         []common.VpnConnection{},
+		KnownNetworks:   []common.KnownNetwork{},
+		ScannedNetworks: []common.ScannedNetwork{},
 		StatusBar:       models.ModelStatusBar(),
 		Form:            models.ModelWpaEapForm(),
 		Tables:          models.TablesModel{},
 
-		IsTyping:             false,
-		IsInForm:             false,
+		IsTyping:            false,
+		IsInForm:            false,
 		InitialLoadComplete: false,
 	}
 }
@@ -138,8 +141,8 @@ func (m NetpalaData) Init() tea.Cmd {
 
 	return tea.Batch(
 		loadInitialData(m.Conn),
-		refreshTicker(),
-		waitForDBusSignal(m.Conn, m.DBusSignals),
+		dbus.RefreshTicker(),
+		dbus.WaitForDBusSignal(m.Conn, m.DBusSignals),
 	)
 }
 
@@ -195,13 +198,13 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				if len(m.DeviceData) == 0 {
 					return m, func() tea.Msg {
-						return models.ErrMsg{Err: fmt.Errorf("no wifi device found")}
+						return common.ErrMsg{Err: fmt.Errorf("no wifi device found")}
 					}
 				}
 				wifiDevice := m.DeviceData[0]
 
 				// Use the stored network to Connect, not the current selection
-				return m, AddAndConnectToNetworkCmd(m.Conn, m.NetworkToConnect, password, wifiDevice.Path)
+				return m, dbus.AddAndConnectToNetworkCmd(m.Conn, m.NetworkToConnect, password, wifiDevice.Path)
 			}
 		}
 
@@ -210,27 +213,27 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case models.DeviceUpdateMsg:
+	case common.DeviceUpdateMsg:
 		m.DeviceData = msg
-		return m, waitForDBusSignal(m.Conn, m.DBusSignals)
+		return m, dbus.WaitForDBusSignal(m.Conn, m.DBusSignals)
 
-	case models.VpnUpdateMsg:
+	case common.VpnUpdateMsg:
 		m.VpnData = msg
-		return m, waitForDBusSignal(m.Conn, m.DBusSignals)
+		return m, dbus.WaitForDBusSignal(m.Conn, m.DBusSignals)
 
-	case models.KnownNetworksUpdateMsg:
+	case common.KnownNetworksUpdateMsg:
 		m.FilterKnownFromScanned()
 		m.KnownNetworks = msg
-		return m, waitForDBusSignal(m.Conn, m.DBusSignals)
+		return m, dbus.WaitForDBusSignal(m.Conn, m.DBusSignals)
 
-	case models.ScannedNetworksUpdateMsg:
+	case common.ScannedNetworksUpdateMsg:
 		// The `nil` message is the trigger from the listener.
 		if msg == nil {
 			debounceCmd := tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
-				return models.PerformScanRefreshMsg{}
+				return common.PerformScanRefreshMsg{}
 			})
 			// Re-arm the main listener right away, but start the debounce timer.
-			return m, tea.Batch(waitForDBusSignal(m.Conn, m.DBusSignals), debounceCmd)
+			return m, tea.Batch(dbus.WaitForDBusSignal(m.Conn, m.DBusSignals), debounceCmd)
 		}
 		// This is the actual data from a completed scan.
 		m.ScannedNetworks = msg
@@ -238,11 +241,11 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// No need to re-arm listener here, as it's handled by the debounce logic.
 		return m, nil
 
-	case models.PerformScanRefreshMsg:
+	case common.PerformScanRefreshMsg:
 		// The debounce timer fired, now perform the scan.
-		return m, requestScan(m.Conn)
+		return m, dbus.RequestScan(m.Conn)
 
-	case models.ErrMsg: 
+	case common.ErrMsg:
 		m.Err = msg.Err
 		return m, nil
 
@@ -256,8 +259,8 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Form = newForm.(models.WpaEapForm)
 		return m, formCmd
 
-	case models.PeriodicRefreshMsg:
-		return m, refreshAllData(m.Conn)
+	case common.PeriodicRefreshMsg:
+		return m, dbus.RefreshAllData(m.Conn)
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -269,7 +272,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "r":
-			return m, requestScan(m.Conn)
+			return m, dbus.RequestScan(m.Conn)
 
 		case "up", "k":
 			if m.SelectedEntry > 0 && !m.IsTyping {
@@ -302,7 +305,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter", " ":
 			if m.selectedBox == 0 && len(m.DeviceData) > 0 {
 				// Enable/Disable Wifi Card
-				return m, ToggleWifiCmd(m.Conn, !m.DeviceData[0].Powered)
+				return m, dbus.ToggleWifiCmd(m.Conn, !m.DeviceData[0].Powered)
 			} else if m.selectedBox == 2 && len(m.VpnData) > 0 && len(m.DeviceData) > 0 {
 				// Connect to VPN
 
@@ -310,7 +313,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Connect to known network
 				selectedNetwork := m.KnownNetworks[m.SelectedEntry]
 				wifiDevice := m.DeviceData[0]
-				return m, ConnectToNetworkCmd(m.Conn, selectedNetwork.Path, wifiDevice.Path)
+				return m, dbus.ConnectToNetworkCmd(m.Conn, selectedNetwork.Path, wifiDevice.Path)
 			} else if m.selectedBox == 4 && len(m.ScannedNetworks) > 0 && len(m.DeviceData) > 0 {
 				// Store the selected network before entering typing mode
 				m.NetworkToConnect = m.ScannedNetworks[m.SelectedEntry]
@@ -353,7 +356,7 @@ func (m NetpalaData) View() string {
 		fgModel := &m.Form
 		xPosition := overlay.Left
 		yPosition := overlay.Center
-		xOffset := models.CalculatePadding(m.Form.View())
+		xOffset := common.CalculatePadding(m.Form.View())
 		yOffset := 0
 
 		overlayModel := overlay.New(fgModel, bgModel, xPosition, yPosition, xOffset, yOffset)

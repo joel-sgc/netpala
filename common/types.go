@@ -25,8 +25,14 @@ type DeviceUpdateMsg []Device
 type KnownNetworksUpdateMsg []KnownNetwork
 type ScannedNetworksUpdateMsg []ScannedNetwork
 type ErrMsg struct{ Err error }
+
 type PeriodicRefreshMsg struct{}
 type PerformScanRefreshMsg struct{}
+
+type ExitFormMsg struct{}
+type SubmitEapFormMsg struct {
+	Config map[string]string
+}
 
 type Device struct {
 	Path         dbus.ObjectPath

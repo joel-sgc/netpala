@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"netpala/common"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -11,14 +12,17 @@ import (
 )
 
 type WpaEapForm struct {
-	eapMethod      selector.Model
-	phase2Auth     selector.Model
-	identity       textinput.Model
-	password       textinput.Model
-	caCert         textinput.Model
-	focused        int
-	eapSelected    bool
-	phase2Selected bool
+	EapMethod      	selector.Model
+	Phase2Auth     	selector.Model
+	Identity       	textinput.Model
+	Password       	textinput.Model
+	CaCert         	textinput.Model
+	focused        	int
+	
+	SSIDSelected		string
+	EapSelected   	bool
+	Phase2Selected	bool
+	DisableForm   	func()
 }
 
 type EAPMethod struct {
@@ -26,28 +30,28 @@ type EAPMethod struct {
 }
 
 func ModelWpaEapForm() WpaEapForm {
-	identity := textinput.New()
-	identity.Placeholder = "Identity"
-	identity.Prompt = ""
-	identity.Width = 32
-	identity.CharLimit = 256
+	Identity := textinput.New()
+	Identity.Placeholder = "Identity"
+	Identity.Prompt = ""
+	Identity.Width = 32
+	Identity.CharLimit = 256
 
-	password := textinput.New()
-	password.Placeholder = "Password"
-	password.Prompt = ""
-	password.Width = 32
-	password.CharLimit = 256
-	password.EchoMode = textinput.EchoPassword
-	password.EchoCharacter = '*'
+	Password := textinput.New()
+	Password.Placeholder = "Password"
+	Password.Prompt = ""
+	Password.Width = 32
+	Password.CharLimit = 256
+	Password.EchoMode = textinput.EchoPassword
+	Password.EchoCharacter = '*'
 
-	caCert := textinput.New()
-	caCert.Placeholder = "Path to CA certificate (e.g. /etc/ssl/certs/ca.pem)"
-	caCert.Prompt = ""
-	caCert.Width = 32
-	caCert.CharLimit = 512
+	CaCert := textinput.New()
+	CaCert.Placeholder = "e.g. /etc/ssl/certs/ca.pem"
+	CaCert.Prompt = ""
+	CaCert.Width = 32
+	CaCert.CharLimit = 512
 
 	return WpaEapForm{
-		eapMethod: selector.Model{
+		EapMethod: selector.Model{
 			Data: []any{
 				EAPMethod{Type: "PEAP"},
 				EAPMethod{Type: "TTLS"},
@@ -66,7 +70,7 @@ func ModelWpaEapForm() WpaEapForm {
 			HeaderFunc:     emptyFunc,
 			FooterFunc:     emptyFunc,
 		},
-		phase2Auth: selector.Model{
+		Phase2Auth: selector.Model{
 			Data: []any{
 				EAPMethod{Type: "MSCHAPV2"},
 				EAPMethod{Type: "PAP"},
@@ -87,12 +91,12 @@ func ModelWpaEapForm() WpaEapForm {
 			HeaderFunc:     emptyFunc,
 			FooterFunc:     emptyFunc,
 		},
-		identity:       identity,
-		password:       password,
-		caCert:         caCert,
+		Identity:       Identity,
+		Password:       Password,
+		CaCert:         CaCert,
 		focused:        0,
-		eapSelected:    false,
-		phase2Selected: false,
+		EapSelected:    false,
+		Phase2Selected: false,
 	}
 }
 func (m WpaEapForm) Init() tea.Cmd {
@@ -110,38 +114,38 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			switch m.focused {
 			case 0:
-				m.eapSelected = true
+				m.EapSelected = true
 			case 1:
-				m.phase2Selected = true
+				m.Phase2Selected = true
 			}
 		// --- focus switching ---
 		case "tab", "shift+tab":
 			if key.String() == "shift+tab" {
-				m.focused = (m.focused + 4) % 5
+				m.focused = (m.focused + 5) % 6
 			} else {
-				m.focused = (m.focused + 1) % 5
+				m.focused = (m.focused + 1) % 6
 			}
 
 			// Update focus state for text inputs
-			m.identity.Blur()
-			m.password.Blur()
-			m.caCert.Blur()
+			m.Identity.Blur()
+			m.Password.Blur()
+			m.CaCert.Blur()
 
 			switch m.focused {
 			case 0:
-				m.eapMethod.SelectedFunc = selectedFunc
-				m.phase2Auth.SelectedFunc = unselectedFunc
+				m.EapMethod.SelectedFunc = selectedFunc
+				m.Phase2Auth.SelectedFunc = unselectedFunc
 			case 1:
-				m.eapMethod.SelectedFunc = unselectedFunc
-				m.phase2Auth.SelectedFunc = selectedFunc
+				m.EapMethod.SelectedFunc = unselectedFunc
+				m.Phase2Auth.SelectedFunc = selectedFunc
 			case 2:
-				m.identity.Focus()
-				m.eapMethod.SelectedFunc = unselectedFunc
-				m.phase2Auth.SelectedFunc = unselectedFunc
+				m.Identity.Focus()
+				m.EapMethod.SelectedFunc = unselectedFunc
+				m.Phase2Auth.SelectedFunc = unselectedFunc
 			case 3:
-				m.password.Focus()
+				m.Password.Focus()
 			case 4:
-				m.caCert.Focus()
+				m.CaCert.Focus()
 			}
 			// Don't pass the tab key to the component itself
 			return m, nil
@@ -150,23 +154,21 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+a":
 			switch m.focused {
 			case 2:
-				ti := m.identity
+				ti := m.Identity
 				ti.SetCursor(len(ti.Value()))
-				m.identity = ti
+				m.Identity = ti
 			case 3:
-				ti := m.password
+				ti := m.Password
 				ti.SetCursor(len(ti.Value()))
-				m.password = ti
+				m.Password = ti
 			case 4:
-				ti := m.caCert
+				ti := m.CaCert
 				ti.SetCursor(len(ti.Value()))
-				m.caCert = ti
+				m.CaCert = ti
 			}
 			return m, nil
-
-		// --- quit ---
-		case "ctrl+c", "esc":
-			return m, tea.Quit
+		case "esc", "ctrl+c":
+			return m, func() tea.Msg { return common.ExitFormMsg{} }
 		}
 	}
 
@@ -175,50 +177,64 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// 1. Pass non-key messages (like WindowSizeMsg) to selectors so they can render.
 	if _, ok := msg.(tea.KeyMsg); !ok {
-		sm, cmd = m.eapMethod.Update(msg)
-		m.eapMethod = *sm
+		sm, cmd = m.EapMethod.Update(msg)
+		m.EapMethod = *sm
 		cmds = append(cmds, cmd)
 
-		sm, cmd = m.phase2Auth.Update(msg)
-		m.phase2Auth = *sm
+		sm, cmd = m.Phase2Auth.Update(msg)
+		m.Phase2Auth = *sm
 		cmds = append(cmds, cmd)
 	}
 
 	// 2. Pass *all* messages to text inputs; they handle focus internally.
-	m.identity, cmd = m.identity.Update(msg)
+	m.Identity, cmd = m.Identity.Update(msg)
 	cmds = append(cmds, cmd)
-	m.password, cmd = m.password.Update(msg)
+	m.Password, cmd = m.Password.Update(msg)
 	cmds = append(cmds, cmd)
-	m.caCert, cmd = m.caCert.Update(msg)
+	m.CaCert, cmd = m.CaCert.Update(msg)
 	cmds = append(cmds, cmd)
 
 	// 3. Only pass key-press messages to the *focused* selector.
 	if _, ok := msg.(tea.KeyMsg); ok {
 		switch m.focused {
 		case 0:
-			sm, cmd = m.eapMethod.Update(msg)
-			m.eapMethod = *sm
+			sm, cmd = m.EapMethod.Update(msg)
+			m.EapMethod = *sm
 			cmds = append(cmds, cmd)
 
 			if msg.(tea.KeyMsg).String() == "enter" {
 				m.focused++
-				m.eapMethod.SelectedFunc = unselectedFunc
-				m.phase2Auth.SelectedFunc = selectedFunc
+				m.EapMethod.SelectedFunc = unselectedFunc
+				m.Phase2Auth.SelectedFunc = selectedFunc
 			}
 		case 1:
-			sm, cmd = m.phase2Auth.Update(msg)
-			m.phase2Auth = *sm
+			sm, cmd = m.Phase2Auth.Update(msg)
+			m.Phase2Auth = *sm
 			cmds = append(cmds, cmd)
 
 			if msg.(tea.KeyMsg).String() == "enter" {
-				m.eapMethod.SelectedFunc = unselectedFunc
-				m.phase2Auth.SelectedFunc = unselectedFunc
-				m.identity.Focus()
+				m.EapMethod.SelectedFunc = unselectedFunc
+				m.Phase2Auth.SelectedFunc = unselectedFunc
+				m.Identity.Focus()
 				m.focused++
+			}
+		case 5:
+			// Submit form
+			config := map[string]string{
+				"ssid":				 m.SSIDSelected,
+				"eap":         m.EapMethod.Selected().(EAPMethod).Type,
+				"phase2-auth": m.Phase2Auth.Selected().(EAPMethod).Type,
+				"identity":    m.Identity.Value(),
+				"password":    m.Password.Value(),
+				"ca_cert":     m.CaCert.Value(),
+			}
+			
+			// Send the message with the data back to the parent
+			return m, func() tea.Msg {
+				return common.SubmitEapFormMsg{Config: config}
 			}
 		}
 	}
-	// --- END NEW LOGIC ---
 
 	return m, tea.Batch(cmds...)
 }
@@ -248,61 +264,74 @@ func (m WpaEapForm) View() string {
 		Padding(0, 1)
 
 	// Always render all text boxes, just change the style.
-	eapMethodLabel := inactiveLabelStyle.Render("EAP Method:")
+	EapMethodLabel := inactiveLabelStyle.Render("EAP Method:")
 	phase2Label := inactiveLabelStyle.Render("Phase 2 (inner-auth):")
 
-	identityLabel := inactiveLabelStyle.Render("Identity:")
-	identityBox := inactiveBorderStyle.Render(m.identity.View())
+	IdentityLabel := inactiveLabelStyle.Render("Identity:")
+	IdentityBox := inactiveBorderStyle.Render(m.Identity.View())
 
-	passwordLabel := inactiveLabelStyle.Render("\nPassword:")
-	passwordBox := inactiveBorderStyle.Render(m.password.View())
+	PasswordLabel := inactiveLabelStyle.Render("\nPassword:")
+	PasswordBox := inactiveBorderStyle.Render(m.Password.View())
 
-	caCertLabel := inactiveLabelStyle.Render("\nCA Certificate:")
-	caCertBox := inactiveBorderStyle.Render(m.caCert.View())
+	CaCertLabel := inactiveLabelStyle.Render("\nCA Certificate:")
+	CaCertBox := inactiveBorderStyle.Render(m.CaCert.View())
+
+	submitLabel := inactiveBorderStyle.
+		Width(36).
+		Align(lipgloss.Center).
+		Render("Connect")
 
 	switch m.focused {
 	case 0:
-		eapMethodLabel = activeLabelStyle.Render("EAP Method:")
+		EapMethodLabel = activeLabelStyle.Render("EAP Method:")
 	case 1:
 		phase2Label = activeLabelStyle.Render("Phase 2 (inner-auth):")
 	case 2:
-		identityLabel = activeLabelStyle.Render("Identity:")
-		identityBox = activeBorderStyle.Render(m.identity.View())
+		IdentityLabel = activeLabelStyle.Render("Identity:")
+		IdentityBox = activeBorderStyle.Render(m.Identity.View())
 	case 3:
-		passwordLabel = activeLabelStyle.Render("\nPassword:")
-		passwordBox = activeBorderStyle.Render(m.password.View())
+		PasswordLabel = activeLabelStyle.Render("\nPassword:")
+		PasswordBox = activeBorderStyle.Render(m.Password.View())
 	case 4:
-		caCertLabel = activeLabelStyle.Render("\nCA Certificate:")
-		caCertBox = activeBorderStyle.Render(m.caCert.View())
+		CaCertLabel = activeLabelStyle.Render("\nCA Certificate:")
+		CaCertBox = activeBorderStyle.Render(m.CaCert.View())
+	case 5:
+		submitLabel = activeBorderStyle.
+			Width(36).
+			Bold(true).
+			Align(lipgloss.Center).
+			BorderForeground(lipgloss.Color("#cda162")).
+			Render("Connect")
 	}
 	// --- END NEW LOGIC ---
-	eapStr := strings.TrimSuffix(strings.Replace(m.eapMethod.View(), "\n", "", 2), "\n")
-	phase2Str := strings.TrimSuffix(strings.Replace(m.phase2Auth.View(), "\n", "", 2), "\n")
-	if m.eapSelected {
-		eapStr = m.eapMethod.View()
+	eapStr := strings.TrimSuffix(strings.Replace(m.EapMethod.View(), "\n", "", 2), "\n")
+	phase2Str := strings.TrimSuffix(strings.Replace(m.Phase2Auth.View(), "\n", "", 2), "\n")
+	if m.EapSelected {
+		eapStr = m.EapMethod.View()
 	}
-	if m.phase2Selected {
-		phase2Str = m.phase2Auth.View()
+	if m.Phase2Selected {
+		phase2Str = m.Phase2Auth.View()
 	}
 
 	// We perform the string alterations below the remove the spacing reserved for the header and footer of the selector
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		eapMethodLabel,
+		EapMethodLabel,
 		eapStr,
 
 		phase2Label,
 		phase2Str,
 
-		identityLabel,
-		identityBox,
+		IdentityLabel,
+		IdentityBox,
 
-		passwordLabel,
-		passwordBox,
+		PasswordLabel,
+		PasswordBox,
 
-		caCertLabel,
-		caCertBox,
+		CaCertLabel,
+		CaCertBox,
+
+		submitLabel,
 	)
-
 	return formStyle.Render(content)
 }
 
@@ -328,7 +357,7 @@ func completedFunc(options []string) func(selected any) string {
 			if option == selected.(EAPMethod).Type {
 				str += lipgloss.NewStyle().Foreground(lipgloss.Color("#cda162")).Render(fmt.Sprintf("%s  %d. %s", "»", i+1, option)) + "\n"
 			} else {
-				str += fmt.Sprintf("  %s\n", unselectedFunc(selector.Model{}, EAPMethod{Type: option}, i))
+				str += fmt.Sprintf("  %s", unselectedFunc(selector.Model{}, EAPMethod{Type: option}, i)) + "\n"
 			}
 		}
 

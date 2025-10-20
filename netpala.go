@@ -149,17 +149,41 @@ func (m NetpalaData) Init() tea.Cmd {
 func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	if m.Err != nil {
-		if key, ok := msg.(tea.KeyMsg); ok {
-			switch key.String() {
-			case "ctrl+c", "q":
-				return m, tea.Quit
-			}
-		}
-		return m, nil
-	}
-
 	if m.IsInForm {
+		switch msg := msg.(type) {
+		case common.ExitFormMsg:
+			m.IsInForm = false
+			m.Form = models.ModelWpaEapForm()
+
+			var formCmd tea.Cmd
+			var newForm tea.Model
+			newForm, formCmd = m.Form.Update(tea.WindowSizeMsg{Width: m.Width, Height: m.Height})
+			m.Form = newForm.(models.WpaEapForm)
+			return m, formCmd
+		case common.SubmitEapFormMsg:
+			m.IsInForm = false
+			m.Form = models.ModelWpaEapForm()
+
+			// Re-initialize the new form with the window size
+			var formCmd tea.Cmd
+			var newForm tea.Model
+			newForm, formCmd = m.Form.Update(tea.WindowSizeMsg{Width: m.Width, Height: m.Height})
+			m.Form = newForm.(models.WpaEapForm)
+
+			// Get the Wi-Fi device to connect with
+			if len(m.DeviceData) == 0 {
+				return m, func() tea.Msg {
+					return common.ErrMsg{Err: fmt.Errorf("no wifi device found to connect with")}
+				}
+			}
+			wifiDevice := m.DeviceData[0]
+
+			// Add the EAP connection config from the message
+			// and combine it with the form's init command.
+			eapCmd := dbus.AddAndConnectEAPCmd(m.Conn, msg.Config, wifiDevice.Path)
+			return m, tea.Batch(formCmd, eapCmd)
+	}	
+
 		var newForm tea.Model
 		newForm, cmd = m.Form.Update(msg)
 		m.Form = newForm.(models.WpaEapForm)
@@ -247,7 +271,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case common.ErrMsg:
 		m.Err = msg.Err
-		return m, nil
+		return m, nil		
 
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
@@ -320,6 +344,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				if m.NetworkToConnect.Security == "wpa2-eap" {
 					m.IsInForm = true
+					m.Form.SSIDSelected = m.NetworkToConnect.SSID
 					return m, nil
 				} else {
 					m.IsTyping = true
@@ -361,7 +386,7 @@ func (m NetpalaData) View() string {
 
 		overlayModel := overlay.New(fgModel, bgModel, xPosition, yPosition, xOffset, yOffset)
 
-		return overlayModel.View()
+		return overlayModel.View() + m.StatusBar.View()
 	} else {
 		return m.Tables.View() + m.StatusBar.View()
 	}

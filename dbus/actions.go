@@ -2,6 +2,7 @@ package dbus
 
 import (
 	"fmt"
+	"strings"
 
 	"netpala/common"
 	"netpala/network"
@@ -99,6 +100,88 @@ func AddAndConnectToNetworkCmd(conn *dbus.Conn, net common.ScannedNetwork, passw
 
 		// 4. Activate the new connection
 		// We can reuse the same logic as our other connect command.
+		return ConnectToNetworkCmd(conn, newConnectionPath, devicePath)()
+	}
+}
+
+func AddAndConnectEAPCmd(conn *dbus.Conn, config map[string]string, devicePath dbus.ObjectPath) tea.Cmd {
+	return func() tea.Msg {
+		// 1. Validate required fields
+		ssid, ok := config["ssid"]
+		if !ok || ssid == "" {
+			return common.ErrMsg{Err: fmt.Errorf("EAP config is missing SSID")}
+		}
+		eapMethod, ok := config["eap"]
+		if !ok || eapMethod == "" {
+			return common.ErrMsg{Err: fmt.Errorf("EAP config is missing EAP method")}
+		}
+		identity, ok := config["identity"]
+		if !ok || identity == "" {
+			return common.ErrMsg{Err: fmt.Errorf("EAP config is missing identity")}
+		}
+
+		// 2. Generate a new UUID
+		newUUID, err := uuid.NewRandom()
+		if err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to generate UUID for EAP: %w", err)}
+		}
+
+		// 3. Build the 802-1x (EAP) settings
+		eapSettings := map[string]dbus.Variant{
+			"eap":      dbus.MakeVariant([]string{strings.ToLower(eapMethod)}),
+			"identity": dbus.MakeVariant(identity),
+			"password": dbus.MakeVariant(config["password"]),
+		}
+
+		// Only add phase2-auth if it's not "NONE"
+		if phase2, ok := config["phase2-auth"]; ok && phase2 != "" && phase2 != "NONE" {
+			eapSettings["phase2-auth"] = dbus.MakeVariant(strings.ToLower(phase2))
+		}
+
+		// **Handle the certificate path**
+		// If the user provided a path, add it.
+		// If the path is empty, we add nothing, which NM interprets
+		// as "do not use/validate a CA certificate."
+		if certPath, ok := config["ca_cert"]; ok && certPath != "" {
+			// Prepend "file://" to the path, which is required by NM
+			eapSettings["ca-cert"] = dbus.MakeVariant("file://" + certPath)
+		}
+
+		// 4. Build the complete connection settings map
+		settings := map[string]map[string]dbus.Variant{
+			"connection": {
+				"id":         dbus.MakeVariant(ssid),
+				"uuid":       dbus.MakeVariant(newUUID.String()),
+				"type":       dbus.MakeVariant("802-11-wireless"),
+				"autoconnect": dbus.MakeVariant(true),
+			},
+			"802-11-wireless": {
+				"ssid":     dbus.MakeVariant([]byte(ssid)),
+				"mode":     dbus.MakeVariant("infrastructure"),
+				"security": dbus.MakeVariant("802-11-wireless-security"),
+			},
+			"802-11-wireless-security": {
+				"key-mgmt": dbus.MakeVariant("wpa-eap"),
+			},
+			"802-1x": eapSettings, // Add our EAP config
+			"ipv4":   {"method": dbus.MakeVariant("auto")},
+			"ipv6":   {"method": dbus.MakeVariant("auto")},
+		}
+
+		// 5. Add the connection via D-Bus
+		settingsObj := conn.Object(network.NMDest, "/org/freedesktop/NetworkManager/Settings")
+		call := settingsObj.Call("org.freedesktop.NetworkManager.Settings.AddConnection", 0, settings)
+		if call.Err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to add EAP connection: %w", call.Err)}
+		}
+
+		// 6. Get the path of the newly created connection
+		var newConnectionPath dbus.ObjectPath
+		if err := call.Store(&newConnectionPath); err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("could not read new EAP connection path: %w", err)}
+		}
+
+		// 7. Activate the new connection using our existing command
 		return ConnectToNetworkCmd(conn, newConnectionPath, devicePath)()
 	}
 }

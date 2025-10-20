@@ -1,7 +1,7 @@
 # Netpala (Impala Go Edition)
 
 A lightweight (hopefully), terminal-friendly **NetworkManager + wpa_supplicant** wrapper written in **Go**.
-It’s a clone of **Impala** because Impala's UI makes me drool.
+It’s a clone of **Impala** because Impala's UI made a white tear roll down my leg.
 
 ---
 
@@ -9,16 +9,18 @@ It’s a clone of **Impala** because Impala's UI makes me drool.
 
 - ✅ Lists available **network devices**
 - ✅ Displays **known** and **scanned** networks
-- ✅ Adding password based networks (wpa-psk/sae)
+- ✅ Displays **vpn** connections
+- ✅ Adding and connecting to password based networks (wpa-psk/sae)
+- ✅ Adding and connecting to wpa-enterprise based networks (wpa-eap)
 - ✅ Force network scan with keybind
+- ✅ Enabling / Disabling network device
 - ⚙️ Uses **DBus** to talk directly to NetworkManager and wpa_supplicant
 
 ---
 
 ## ⚠️ What’s Missing / TODO
 
-- Integrating WPA-Enterprise networks, will probably just open an editor tab with a template for the user to configure it 
-- VPN connections manager
+- VPN connections manager (halfway down)
 - Probably some bugs
 
 It’s functional enough for me right now, but PRs are welcome if you want to polish it up.
@@ -27,9 +29,9 @@ It’s functional enough for me right now, but PRs are welcome if you want to po
 
 ## 🧩 Implementation Notes
 
-The DBus code (and this readme idc, sue me) was **vibe-coded**.
+The DBus code was **vibe-coded**.
 Yes, really. It works, I don’t care, and it’s not that deep.
-If that sets off your peter tingle, feel free to fork it, rewrite it, or whisper sweet refactors to it in your own repo.
+If that sets you off, feel free to fork it, rewrite it, etc... Do whatever, idc.
 
 ---
 
@@ -37,7 +39,7 @@ If that sets off your peter tingle, feel free to fork it, rewrite it, or whisper
 
 \# Clone and build
 
-\```
+\```bash
 git clone https://github.com/joel-sgc/netpala.git
 cd netpala
 go build

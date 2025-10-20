@@ -1,13 +1,14 @@
 package main
 
 import (
+	"netpala/models"
 	"sort"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
 )
 
-func get_known_networks(conn *dbus.Conn) []known_network {
+func getKnownNetworks(conn *dbus.Conn) []models.KnownNetwork {
 	nm := conn.Object(nmDest, "/org/freedesktop/NetworkManager")
 
 	ssidStr := func(v dbus.Variant) string {
@@ -17,7 +18,7 @@ func get_known_networks(conn *dbus.Conn) []known_network {
 		return ""
 	}
 
-	aps := map[string]known_network{}
+	aps := map[string]models.KnownNetwork{}
 	var devs []dbus.ObjectPath
 	_ = nm.Call(nmDest+".GetDevices", 0).Store(&devs)
 	for _, d := range devs {
@@ -42,8 +43,8 @@ func get_known_networks(conn *dbus.Conn) []known_network {
 					if hw, err := apObj.GetProperty("org.freedesktop.NetworkManager.AccessPoint.HwAddress"); err == nil {
 						bssid = hw.Value().(string)
 					}
-					if old, ok := aps[ss]; !ok || str > old.signal {
-						aps[ss] = known_network{ssid: ss, signal: str, bssid: bssid}
+					if old, ok := aps[ss]; !ok || str > old.Signal {
+						aps[ss] = models.KnownNetwork{SSID: ss, Signal: str, BSSID: bssid}
 					}
 				}
 			}
@@ -62,7 +63,7 @@ func get_known_networks(conn *dbus.Conn) []known_network {
 				ss := ssidStr(ssidVar)
 				if ss != "" {
 					k := aps[ss]
-					k.connected = true
+					k.Connected = true
 					aps[ss] = k
 				}
 			}
@@ -73,7 +74,7 @@ func get_known_networks(conn *dbus.Conn) []known_network {
 	var conns []dbus.ObjectPath
 	_ = setObj.Call("org.freedesktop.NetworkManager.Settings.ListConnections", 0).Store(&conns)
 
-	var known []known_network
+	var known []models.KnownNetwork
 	for _, c := range conns {
 		cobj := conn.Object(nmDest, c)
 		var s map[string]map[string]dbus.Variant
@@ -118,17 +119,17 @@ func get_known_networks(conn *dbus.Conn) []known_network {
 			}
 		}
 		apInfo := aps[ss]
-		known = append(known, known_network{
+		known = append(known, models.KnownNetwork{
 
-			path: c, ssid: ss, security: sec, connected: apInfo.connected, hidden: hidden,
-			auto_connect: auto, signal: apInfo.signal, bssid: apInfo.bssid,
+			Path: c, SSID: ss, Security: sec, Connected: apInfo.Connected, Hidden: hidden,
+			AutoConnect: auto, Signal: apInfo.Signal, BSSID: apInfo.BSSID,
 		})
 	}
 	sort.SliceStable(known, func(i, j int) bool {
-		if known[i].connected != known[j].connected {
-			return known[i].connected
+		if known[i].Connected != known[j].Connected {
+			return known[i].Connected
 		}
-		return known[i].signal > known[j].signal
+		return known[i].Signal > known[j].Signal
 	})
 	return known
 }

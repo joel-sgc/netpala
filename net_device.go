@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"netpala/models"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
@@ -16,10 +17,10 @@ const (
 	accessPointIF = "org.freedesktop.NetworkManager.AccessPoint"
 )
 
-func get_devices_data(c *dbus.Conn) []device {
-	var devicesList []device
+func getDevicesData(c *dbus.Conn) []models.Device {
+	var devicesList []models.Device
 	nm := c.Object(nmDest, dbus.ObjectPath(nmPath))
-	p := get_props(nm, nmDest)
+	p := getProps(nm, nmDest)
 
 	settingsObj := c.Object(nmDest, "/org/freedesktop/NetworkManager/Settings")
 	var connPaths []dbus.ObjectPath
@@ -53,7 +54,7 @@ func get_devices_data(c *dbus.Conn) []device {
 
 	for _, d := range devs {
 		obj := c.Object(nmDest, d)
-		dp := get_props(obj, devIF)
+		dp := getProps(obj, devIF)
 		if dp["DeviceType"].Value().(uint32) != 2 {
 			continue
 		}
@@ -73,7 +74,7 @@ func get_devices_data(c *dbus.Conn) []device {
 
 		iface := dp["Interface"].Value().(string)
 		mac := strings.ToLower(dp["HwAddress"].Value().(string))
-		wp := get_props(obj, wifiIF)
+		wp := getProps(obj, wifiIF)
 		mode := wp["Mode"].Value().(uint32)
 		ap := wp["ActiveAccessPoint"].Value().(dbus.ObjectPath)
 
@@ -117,15 +118,15 @@ func get_devices_data(c *dbus.Conn) []device {
 			modeStr = fmt.Sprintf("%d", mode)
 		}
 
-		devicesList = append(devicesList, device{
-			path: d,
-			name: iface, mode: modeStr,
-			powered:      p["WirelessEnabled"].Value().(bool) && p["WirelessHardwareEnabled"].Value().(bool),
-			address:      mac,
-			state:        deviceState, // **FIX:** Use the accurate per-device state.
-			currentbssid: bssid,
-			scanning:     isScanning,
-			frequency:    frequency, security: security,
+		devicesList = append(devicesList, models.Device{
+			Path: d,
+			Name: iface, Mode: modeStr,
+			Powered:      p["WirelessEnabled"].Value().(bool) && p["WirelessHardwareEnabled"].Value().(bool),
+			Address:      mac,
+			State:        deviceState, // **FIX:** Use the accurate per-device state.
+			CurrentBSSID: bssid,
+			Scanning:     isScanning,
+			Frequency:    frequency, Security: security,
 		})
 	}
 	return devicesList

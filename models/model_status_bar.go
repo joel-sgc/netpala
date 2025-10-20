@@ -1,4 +1,4 @@
-package main
+package models
 
 import (
 	"regexp"
@@ -43,27 +43,27 @@ var keys = keyMap{
 	),
 }
 
-type status_bar_data struct {
-	input textinput.Model
-	err   error
+type StatusBarData struct {
+	Input textinput.Model
+	Err   error
 }
 
-func StatusBarModel() status_bar_data {
+func ModelStatusBar() StatusBarData {
 	ti := textinput.New()
 	ti.CharLimit = 156
 	ti.Width = 32
 
-	return status_bar_data{
-		input: ti,
-		err:   nil,
+	return StatusBarData{
+		Input: ti,
+		Err:   nil,
 	}
 }
 
-func (m status_bar_data) Init() tea.Cmd {
+func (m StatusBarData) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-func (m status_bar_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m StatusBarData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -74,31 +74,31 @@ func (m status_bar_data) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	// We handle errors just like any other message
-	case errMsg:
+	case ErrMsg:
 		return m, nil
 	}
 
-	m.input, cmd = m.input.Update(msg)
+	m.Input, cmd = m.Input.Update(msg)
 	return m, cmd
 }
 
 // I don't understand why these numbers work, I just know that they do. Periodt.
-func (m status_bar_data) View() string {
-	key_help := help.New().View(keys)
-	input_len := len(m.input.View()) - 12
-	if m.input.Focused() {
-		if len(m.input.Value()) == 0 {
-			input_len = len(m.input.Placeholder)
+func (m StatusBarData) View() string {
+	keyHelp := help.New().View(keys)
+	inputLen := len(m.Input.View()) - 12
+	if m.Input.Focused() {
+		if len(m.Input.Value()) == 0 {
+			inputLen = len(m.Input.Placeholder)
 		} else {
-			input_len = 23
+			inputLen = 23
 		}
 	}
 
 	ansi := regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
-	clean := ansi.ReplaceAllString(key_help, "")
+	clean := ansi.ReplaceAllString(keyHelp, "")
 
-	total_width := window_width()
-	remaining_width := total_width - (input_len + len(clean)) - 6 // extra 6 to account for automatic padding
+	totalWidth := windowWidth()
+	remainingWidth := totalWidth - (inputLen + len(clean)) - 6 // extra 6 to account for automatic padding
 
-	return m.input.View() + strings.Repeat(" ", max(remaining_width, 0)) + key_help
+	return m.Input.View() + strings.Repeat(" ", max(remainingWidth, 0)) + keyHelp
 }

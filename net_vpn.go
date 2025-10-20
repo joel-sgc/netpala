@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"netpala/models"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
 )
 
-func get_vpn_data(c *dbus.Conn) []vpn_connection {
-	var vpnList []vpn_connection
+func getVpnData(c *dbus.Conn) []models.VpnConnection {
+	var vpnList []models.VpnConnection
 
 	nm := c.Object(nmDest, nmPath)
 	settingsObj := c.Object(nmDest, "/org/freedesktop/NetworkManager/Settings")
@@ -76,12 +77,12 @@ func get_vpn_data(c *dbus.Conn) []vpn_connection {
 			// Check if this connection is active and get its active path.
 			activePath, isConnected := activeConnections[path]
 
-			vpnList = append(vpnList, vpn_connection{
-				path:       path,
-				activePath: activePath, // Store the active path
-				name:       name,
-				ctype:      friendlyType,
-				connected:  isConnected,
+			vpnList = append(vpnList, models.VpnConnection{
+				Path:       path,
+				ActivePath: activePath, // Store the active path
+				Name:       name,
+				ConnType:   friendlyType,
+				Connected:  isConnected,
 			})
 		}
 	}

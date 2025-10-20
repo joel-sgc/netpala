@@ -2,29 +2,30 @@ package main
 
 import (
 	"fmt"
+	"netpala/models"
 	"sort"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
 )
 
-func get_props(o dbus.BusObject, iface string) map[string]dbus.Variant {
+func getProps(o dbus.BusObject, iface string) map[string]dbus.Variant {
 	var m map[string]dbus.Variant
 	o.Call(propsIF+".GetAll", 0, iface).Store(&m)
 	return m
 }
 
-func get_scanned_networks(c *dbus.Conn) []scanned_network {
+func getScannedNetworks(c *dbus.Conn) []models.ScannedNetwork {
 	nm := c.Object(nmDest, dbus.ObjectPath(nmPath))
 	var devPaths []dbus.ObjectPath
 	if err := nm.Call(nmDest+".GetDevices", 0).Store(&devPaths); err != nil {
 		fmt.Printf("failed to get devices: %v", err)
 	}
 
-	var allNetworks []scanned_network
+	var allNetworks []models.ScannedNetwork
 	for _, devPath := range devPaths {
 		devObj := c.Object(nmDest, devPath)
-		devProps := get_props(devObj, devIF)
+		devProps := getProps(devObj, devIF)
 		if devProps["DeviceType"].Value().(uint32) != 2 {
 			continue
 		}
@@ -36,7 +37,7 @@ func get_scanned_networks(c *dbus.Conn) []scanned_network {
 
 		for _, apPath := range apPaths {
 			apObj := c.Object(nmDest, apPath)
-			apProps := get_props(apObj, accessPointIF)
+			apProps := getProps(apObj, accessPointIF)
 
 			var ssid string
 			if ssidVal, ok := apProps["Ssid"]; ok {
@@ -68,18 +69,18 @@ func get_scanned_networks(c *dbus.Conn) []scanned_network {
 				rsnFlags = val
 			}
 
-			allNetworks = append(allNetworks, scanned_network{
-				ssid:     ssid,
-				bssid:    bssid,
-				security: get_security_type(wpaFlags, rsnFlags),
-				signal:   signal,
+			allNetworks = append(allNetworks, models.ScannedNetwork{
+				SSID:     ssid,
+				BSSID:    bssid,
+				Security: getSecurityType(wpaFlags, rsnFlags),
+				Signal:   signal,
 			})
 		}
 	}
-	return remove_duplicates(allNetworks)
+	return removeDuplicates(allNetworks)
 }
 
-func get_security_type(wpaFlags, rsnFlags uint32) string {
+func getSecurityType(wpaFlags, rsnFlags uint32) string {
 	const (
 		NM_802_11_AP_SEC_KEY_MGMT_PSK             = 0x00000100
 		NM_802_11_AP_SEC_KEY_MGMT_802_1X          = 0x00000200
@@ -111,19 +112,19 @@ func get_security_type(wpaFlags, rsnFlags uint32) string {
 	return strings.Join(security, " / ")
 }
 
-func remove_duplicates(networks []scanned_network) []scanned_network {
-	networkMap := make(map[string]scanned_network)
+func removeDuplicates(networks []models.ScannedNetwork) []models.ScannedNetwork {
+	networkMap := make(map[string]models.ScannedNetwork)
 	for _, network := range networks {
-		existing, exists := networkMap[network.ssid]
-		if !exists || network.signal > existing.signal {
-			networkMap[network.ssid] = network
+		existing, exists := networkMap[network.SSID]
+		if !exists || network.Signal > existing.Signal {
+			networkMap[network.SSID] = network
 		}
 	}
 
-	var result []scanned_network
+	var result []models.ScannedNetwork
 	for _, network := range networkMap {
 		result = append(result, network)
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i].signal > result[j].signal })
+	sort.Slice(result, func(i, j int) bool { return result[i].Signal > result[j].Signal })
 	return result
 }

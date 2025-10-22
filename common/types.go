@@ -27,7 +27,6 @@ type ScannedNetworksUpdateMsg []ScannedNetwork
 type ErrMsg struct{ Err error }
 
 type PeriodicRefreshMsg struct{}
-type RefreshDeviceStatusMsg struct{}
 type RefreshKnownNetworksMsg struct{}
 type PerformScanRefreshMsg struct{}
 type OptimisticAddMsg struct {

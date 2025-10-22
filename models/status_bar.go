@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type keyMap struct {
@@ -85,7 +86,12 @@ func (m StatusBarData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // I don't understand why these numbers work, I just know that they do. Periodt.
 func (m StatusBarData) View() string {
-	keyHelp := help.New().View(keys)
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#a7abca"))
+
+	keyHelp := help.New()
+	keyHelp.Styles.ShortDesc = style
+	keyHelp.Styles.ShortKey = style
+
 	inputLen := len(m.Input.View()) - 12
 	if m.Input.Focused() {
 		if len(m.Input.Value()) == 0 {
@@ -95,11 +101,13 @@ func (m StatusBarData) View() string {
 		}
 	}
 
+	keyIndex := keyHelp.View(keys)
+
 	ansi := regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
-	clean := ansi.ReplaceAllString(keyHelp, "")
+	clean := ansi.ReplaceAllString(keyIndex, "")
 
 	totalWidth := common.WindowDimensions().Width
 	remainingWidth := totalWidth - (inputLen + len(clean)) - 6 // extra 6 to account for automatic padding
 
-	return m.Input.View() + strings.Repeat(" ", max(remainingWidth, 0)) + keyHelp
+	return m.Input.View() + strings.Repeat(" ", max(remainingWidth, 0)) + keyIndex
 }

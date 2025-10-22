@@ -311,10 +311,6 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The debounce timer fired, now perform the scan.
 		return m, dbus.GetScanResults(m.Conn)
 
-	case common.RefreshDeviceStatusMsg:
-		// The timer from the 'r' key fired. Refresh device status.
-		return m, dbus.RefreshDevices(m.Conn)
-
 	case common.ErrMsg:
 		m.Err = msg.Err
 		return m, nil		
@@ -340,8 +336,14 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Conn.Close()
 			return m, tea.Quit
 
-		case "r":
-			return m, dbus.RequestScan(m.Conn)
+	case "r":
+		var cmds []tea.Cmd
+		cmds = append(cmds, dbus.RequestScan(m.Conn))
+		cmds = append(cmds, func() tea.Msg {
+			return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(m.Conn))
+		})
+
+		return m, tea.Batch(cmds...)
 
 		case "up", "k":
 			if m.SelectedEntry > 0 && !m.IsTyping {

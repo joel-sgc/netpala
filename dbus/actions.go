@@ -3,6 +3,7 @@ package dbus
 import (
 	"fmt"
 	"strings"
+	"time" // Added time import
 
 	"netpala/common"
 	"netpala/network"
@@ -18,8 +19,6 @@ func ConnectToNetworkCmd(conn *dbus.Conn, connectionPath, devicePath dbus.Object
 		nm := conn.Object(network.NMDest, dbus.ObjectPath(network.NMPath))
 
 		// The D-Bus method call to activate the connection.
-		// The final argument is for a "specific object" (like a particular AP),
-		// which we leave as "/" to let NetworkManager decide.
 		call := nm.Call(
 			"org.freedesktop.NetworkManager.ActivateConnection",
 			0,
@@ -31,23 +30,21 @@ func ConnectToNetworkCmd(conn *dbus.Conn, connectionPath, devicePath dbus.Object
 		if call.Err != nil {
 			return common.ErrMsg{Err: fmt.Errorf("failed to activate connection: %w", call.Err)}
 		}
-
-		// We don't need to return a success message. If the call succeeds,
-		// our D-Bus signal listener will automatically pick up the state
-		// change and refresh the UI for us.
+		// Success is handled by signal listener
 		return nil
 	}
 }
 
+// AddAndConnectToNetworkCmd adds a standard network and attempts connection.
 func AddAndConnectToNetworkCmd(conn *dbus.Conn, net common.ScannedNetwork, password string, devicePath dbus.ObjectPath) tea.Cmd {
 	return func() tea.Msg {
-		// 1. Generate the connection settings map
+		// 1. Generate UUID
 		newUUID, err := uuid.NewRandom()
 		if err != nil {
 			return common.ErrMsg{Err: fmt.Errorf("failed to generate uuid: %w", err)}
 		}
 
-		// Base connection settings
+		// 2. Build settings map
 		settings := map[string]map[string]dbus.Variant{
 			"connection": {
 				"id":          dbus.MakeVariant(net.SSID),
@@ -63,11 +60,7 @@ func AddAndConnectToNetworkCmd(conn *dbus.Conn, net common.ScannedNetwork, passw
 			"ipv4": {"method": dbus.MakeVariant("auto")},
 			"ipv6": {"method": dbus.MakeVariant("auto")},
 		}
-
-		// Add security-specific settings
 		securitySettings := make(map[string]dbus.Variant)
-		// NOTE: This logic might need to be expanded for more complex security types
-		// like WPA-EAP, but it covers the common WPA2/WPA3 cases.
 		switch net.Security {
 		case "wpa3-sae":
 			securitySettings["key-mgmt"] = dbus.MakeVariant("sae")
@@ -75,7 +68,7 @@ func AddAndConnectToNetworkCmd(conn *dbus.Conn, net common.ScannedNetwork, passw
 		case "wpa2-psk":
 			securitySettings["key-mgmt"] = dbus.MakeVariant("wpa-psk")
 			securitySettings["psk"] = dbus.MakeVariant(password)
-		default: // Assuming WPA2/WPA3 for anything encrypted that isn't SAE
+		default:
 			if net.Security != "open" {
 				securitySettings["key-mgmt"] = dbus.MakeVariant("wpa-psk")
 				securitySettings["psk"] = dbus.MakeVariant(password)
@@ -85,25 +78,45 @@ func AddAndConnectToNetworkCmd(conn *dbus.Conn, net common.ScannedNetwork, passw
 			settings["802-11-wireless-security"] = securitySettings
 		}
 
-		// 2. Add the connection via D-Bus
+		// 3. Add the connection via D-Bus
 		settingsObj := conn.Object(network.NMDest, "/org/freedesktop/NetworkManager/Settings")
 		call := settingsObj.Call("org.freedesktop.NetworkManager.Settings.AddConnection", 0, settings)
 		if call.Err != nil {
 			return common.ErrMsg{Err: fmt.Errorf("failed to add connection: %w", call.Err)}
 		}
 
-		// 3. Get the path of the newly created connection
+		// 4. Get the path (optional)
 		var newConnectionPath dbus.ObjectPath
-		if err := call.Store(&newConnectionPath); err != nil {
-			return common.ErrMsg{Err: fmt.Errorf("could not read new connection path: %w", err)}
+		err = call.Store(&newConnectionPath) // Store error
+
+		// 5. Create the delayed refresh command
+		refreshCmd := tea.Tick(150*time.Millisecond, func(t time.Time) tea.Msg {
+			return common.RefreshKnownNetworksMsg{}
+		})
+
+		// 6. Create the optimistic update message
+		optimisticMsg := common.OptimisticAddMsg{
+			SSID:     net.SSID,
+			Security: net.Security, // Use the security string from scanned network
 		}
 
-		// 4. Activate the new connection
-		// We can reuse the same logic as our other connect command.
-		return ConnectToNetworkCmd(conn, newConnectionPath, devicePath)()
+		// 7. Batch commands based on success
+		var batchCmds []tea.Cmd
+		batchCmds = append(batchCmds, func() tea.Msg { return optimisticMsg }) // Send optimistic update first
+		batchCmds = append(batchCmds, refreshCmd)                             // Schedule real refresh
+
+		if err == nil {
+			// If we got the path, attempt connection
+			batchCmds = append(batchCmds, ConnectToNetworkCmd(conn, newConnectionPath, devicePath))
+		} else {
+			// If we didn't get the path, report the error but still refresh
+			batchCmds = append(batchCmds, func() tea.Msg { return common.ErrMsg{Err: fmt.Errorf("added connection but failed to read path: %w", err)} })
+		}
+		return tea.Batch(batchCmds...)
 	}
 }
 
+// AddAndConnectEAPCmd adds a WPA-EAP network and attempts connection.
 func AddAndConnectEAPCmd(conn *dbus.Conn, config map[string]string, devicePath dbus.ObjectPath) tea.Cmd {
 	return func() tea.Msg {
 		// 1. Validate required fields
@@ -120,39 +133,31 @@ func AddAndConnectEAPCmd(conn *dbus.Conn, config map[string]string, devicePath d
 			return common.ErrMsg{Err: fmt.Errorf("EAP config is missing identity")}
 		}
 
-		// 2. Generate a new UUID
+		// 2. Generate UUID
 		newUUID, err := uuid.NewRandom()
 		if err != nil {
 			return common.ErrMsg{Err: fmt.Errorf("failed to generate UUID for EAP: %w", err)}
 		}
 
-		// 3. Build the 802-1x (EAP) settings
+		// 3. Build EAP settings
 		eapSettings := map[string]dbus.Variant{
 			"eap":      dbus.MakeVariant([]string{strings.ToLower(eapMethod)}),
 			"identity": dbus.MakeVariant(identity),
 			"password": dbus.MakeVariant(config["password"]),
 		}
-
-		// Only add phase2-auth if it's not "NONE"
 		if phase2, ok := config["phase2-auth"]; ok && phase2 != "" && phase2 != "NONE" {
 			eapSettings["phase2-auth"] = dbus.MakeVariant(strings.ToLower(phase2))
 		}
-
-		// **Handle the certificate path**
-		// If the user provided a path, add it.
-		// If the path is empty, we add nothing, which NM interprets
-		// as "do not use/validate a CA certificate."
 		if certPath, ok := config["ca_cert"]; ok && certPath != "" {
-			// Prepend "file://" to the path, which is required by NM
 			eapSettings["ca-cert"] = dbus.MakeVariant("file://" + certPath)
 		}
 
-		// 4. Build the complete connection settings map
+		// 4. Build complete settings map
 		settings := map[string]map[string]dbus.Variant{
 			"connection": {
-				"id":         dbus.MakeVariant(ssid),
-				"uuid":       dbus.MakeVariant(newUUID.String()),
-				"type":       dbus.MakeVariant("802-11-wireless"),
+				"id":          dbus.MakeVariant(ssid),
+				"uuid":        dbus.MakeVariant(newUUID.String()),
+				"type":        dbus.MakeVariant("802-11-wireless"),
 				"autoconnect": dbus.MakeVariant(true),
 			},
 			"802-11-wireless": {
@@ -163,7 +168,7 @@ func AddAndConnectEAPCmd(conn *dbus.Conn, config map[string]string, devicePath d
 			"802-11-wireless-security": {
 				"key-mgmt": dbus.MakeVariant("wpa-eap"),
 			},
-			"802-1x": eapSettings, // Add our EAP config
+			"802-1x": eapSettings,
 			"ipv4":   {"method": dbus.MakeVariant("auto")},
 			"ipv6":   {"method": dbus.MakeVariant("auto")},
 		}
@@ -175,68 +180,103 @@ func AddAndConnectEAPCmd(conn *dbus.Conn, config map[string]string, devicePath d
 			return common.ErrMsg{Err: fmt.Errorf("failed to add EAP connection: %w", call.Err)}
 		}
 
-		// 6. Get the path of the newly created connection
+		// 6. Get the path (optional)
 		var newConnectionPath dbus.ObjectPath
-		if err := call.Store(&newConnectionPath); err != nil {
-			return common.ErrMsg{Err: fmt.Errorf("could not read new EAP connection path: %w", err)}
+		err = call.Store(&newConnectionPath) // Store error
+
+		// 7. Create the delayed refresh command
+		refreshCmd := tea.Tick(150*time.Millisecond, func(t time.Time) tea.Msg {
+			return common.RefreshKnownNetworksMsg{}
+		})
+
+		// 8. Create the optimistic update message
+		optimisticMsg := common.OptimisticAddMsg{
+			SSID:     ssid,
+			Security: "wpa2-eap", // Generally correct assumption for EAP
 		}
 
-		// 7. Activate the new connection using our existing command
-		return ConnectToNetworkCmd(conn, newConnectionPath, devicePath)()
+		// 9. Batch commands based on success
+		var batchCmds []tea.Cmd
+		batchCmds = append(batchCmds, func() tea.Msg { return optimisticMsg }) // Send optimistic update first
+		batchCmds = append(batchCmds, refreshCmd)                             // Schedule real refresh
+
+		if err == nil {
+			// If we got the path, attempt connection
+			batchCmds = append(batchCmds, ConnectToNetworkCmd(conn, newConnectionPath, devicePath))
+		} else {
+			// If we didn't get the path, report the error but still refresh
+			batchCmds = append(batchCmds, func() tea.Msg { return common.ErrMsg{Err: fmt.Errorf("added EAP connection but failed to read path: %w", err)} })
+		}
+		return tea.Batch(batchCmds...)
 	}
 }
 
-func ToggleVpnCmd(conn *dbus.Conn, vpnConnectionPath dbus.ObjectPath, active bool) tea.Cmd {
+// ToggleVpnCmd activates or deactivates a VPN connection.
+func ToggleVpnCmd(conn *dbus.Conn, vpnPath dbus.ObjectPath, activePath dbus.ObjectPath, active bool) tea.Cmd {
 	return func() tea.Msg {
 		nm := conn.Object(network.NMDest, dbus.ObjectPath(network.NMPath))
-
 		var call *dbus.Call
+		action := "activate" // For error message
+
 		if active {
-			// Deactivate the active VPN connection
-			activeConnObj := conn.Object(network.NMDest, vpnConnectionPath)
+			// Deactivate using the *active* connection path
+			action = "deactivate"
+			if activePath == "/" { // Sanity check
+				return common.ErrMsg{Err: fmt.Errorf("cannot deactivate VPN: no active connection path found")}
+			}
+			activeConnObj := conn.Object(network.NMDest, activePath)
+			// Note: Deactivate is on the Active connection interface, not the main NM interface
 			call = activeConnObj.Call("org.freedesktop.NetworkManager.Connection.Active.Deactivate", 0)
 		} else {
-			// Activate the selected VPN connection
+			// Activate using the *saved* connection path
 			call = nm.Call(
 				"org.freedesktop.NetworkManager.ActivateConnection",
 				0,
-				vpnConnectionPath,
-				dbus.ObjectPath("/"), // device path is not needed for VPN
-				dbus.ObjectPath("/"),
+				vpnPath,                // Saved connection path
+				dbus.ObjectPath("/"),   // device path is not needed for VPN
+				dbus.ObjectPath("/"),   // specific object path
 			)
 		}
 
 		if call.Err != nil {
-			action := "activate"
-			if active {
-				action = "deactivate"
-			}
-			return common.ErrMsg{Err: fmt.Errorf("failed to %s vpn connection: %w", action, call.Err)}
+			return common.ErrMsg{Err: fmt.Errorf("failed to %s vpn connection '%s': %w", action, vpnPath, call.Err)}
 		}
-
+		// Success handled by signal listener
 		return nil
 	}
 }
 
+// ToggleWifiCmd sets the master Wi-Fi radio state.
 func ToggleWifiCmd(conn *dbus.Conn, enable bool) tea.Cmd {
 	return func() tea.Msg {
 		nm := conn.Object(network.NMDest, dbus.ObjectPath(network.NMPath))
-
-		// Call the Set method on the standard D-Bus Properties interface
 		call := nm.Call(
 			"org.freedesktop.DBus.Properties.Set",
 			0,
-			network.NMDest,           // The interface that owns the property
-			"WirelessEnabled",        // The property to change
-			dbus.MakeVariant(enable), // The new value (true for on, false for off)
+			network.NMDest,
+			"WirelessEnabled",
+			dbus.MakeVariant(enable),
 		)
-
 		if call.Err != nil {
 			return common.ErrMsg{Err: fmt.Errorf("failed to set WirelessEnabled property: %w", call.Err)}
 		}
+		// Success handled by signal listener
+		return nil
+	}
+}
 
-		// A successful call will automatically trigger a D-Bus signal.
-		// Our existing signal listener will then refresh the device data for us.
+// DeleteConnectionCmd tells NetworkManager to delete a saved connection profile.
+func DeleteConnectionCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath) tea.Cmd {
+	return func() tea.Msg {
+		connObj := conn.Object(network.NMDest, connectionPath)
+		call := connObj.Call(
+			"org.freedesktop.NetworkManager.Settings.Connection.Delete",
+			0,
+		)
+		if call.Err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to delete connection %s: %w", connectionPath, call.Err)}
+		}
+		// Success handled by signal listener
 		return nil
 	}
 }

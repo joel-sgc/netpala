@@ -68,7 +68,40 @@ func RefreshTicker() tea.Cmd {
 	})
 }
 
+func RefreshDevices(conn *dbus.Conn) tea.Cmd {
+	return func() tea.Msg {
+		return common.DeviceUpdateMsg(network.GetDevicesData(conn))
+	}
+}
+
 func RequestScan(conn *dbus.Conn) tea.Cmd {
+	return func() tea.Msg {
+		nm := conn.Object(network.NMDest, dbus.ObjectPath(network.NMPath))
+		var devPaths []dbus.ObjectPath
+		if err := nm.Call(network.NMDest+".GetDevices", 0).Store(&devPaths); err != nil {
+			return common.ErrMsg{Err: err}
+		}
+
+		for _, devPath := range devPaths {
+			devObj := conn.Object(network.NMDest, devPath)
+			devProps := network.GetProps(devObj, network.DevIF)
+			if devProps != nil {
+				if deviceType, ok := devProps["DeviceType"].Value().(uint32); ok && deviceType == 2 { // WiFi device
+					_ = devObj.Call(network.WifiIF+".RequestScan", 0, map[string]dbus.Variant{})
+				}
+			}
+		}
+
+		// Instead of returning data, return a non-blocking timer (Tick)
+		// that will send a message to refresh the device status
+		// after 250ms, giving NM time to update.
+		return tea.Tick(250*time.Millisecond, func(t time.Time) tea.Msg {
+			return common.RefreshDeviceStatusMsg{}
+		})()
+	}
+}
+
+func GetScanResults(conn *dbus.Conn) tea.Cmd {
 	return func() tea.Msg {
 		nm := conn.Object(network.NMDest, dbus.ObjectPath(network.NMPath))
 		var devPaths []dbus.ObjectPath
@@ -83,13 +116,14 @@ func RequestScan(conn *dbus.Conn) tea.Cmd {
 				_ = devObj.Call(network.WifiIF+".RequestScan", 0, map[string]dbus.Variant{})
 			}
 		}
+		
 		return common.ScannedNetworksUpdateMsg(network.GetScannedNetworks(conn))
 	}
 }
 
 func RefreshAllData(conn *dbus.Conn) tea.Cmd {
 	return tea.Batch(
-		RequestScan(conn),
+		GetScanResults(conn),
 		func() tea.Msg { return common.DeviceUpdateMsg(network.GetDevicesData(conn)) },
 		func() tea.Msg { return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(conn)) },
 		func() tea.Msg { return common.VpnUpdateMsg(network.GetVpnData(conn)) },

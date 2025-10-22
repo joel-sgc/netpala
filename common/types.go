@@ -27,11 +27,20 @@ type ScannedNetworksUpdateMsg []ScannedNetwork
 type ErrMsg struct{ Err error }
 
 type PeriodicRefreshMsg struct{}
+type RefreshDeviceStatusMsg struct{}
+type RefreshKnownNetworksMsg struct{}
 type PerformScanRefreshMsg struct{}
+type OptimisticAddMsg struct {
+    SSID     string
+    Security string
+}
 
 type ExitFormMsg struct{}
 type SubmitEapFormMsg struct {
 	Config map[string]string
+}
+type SubmitConfirmationMsg struct {
+	Value bool
 }
 
 type Device struct {
@@ -59,7 +68,7 @@ type KnownNetwork struct {
 }
 
 type ScannedNetwork struct {
-	// path     dbus.ObjectPath
+	Path     dbus.ObjectPath
 	BSSID    string
 	SSID     string
 	Security string

@@ -10,12 +10,12 @@ import (
 	"golang.org/x/term"
 )
 
-func WindowWidth() int {
-	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+func WindowDimensions() struct{ Width, Height int } {
+	width, height, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
-		return 80
+		return struct{ Width, Height int }{80, 80}
 	}
-	return width
+	return struct{ Width, Height int }{width, height}
 }
 
 func freqToBand(freq int) string {
@@ -35,7 +35,7 @@ func padHeaders(headers []string, headersLengths []int) []string {
 	if len(headers) == 0 {
 		return headers
 	}
-	totalWidth := max(WindowWidth()-2, 1)
+	totalWidth := max(WindowDimensions().Width-2, 1)
 	numHeaders := len(headers)
 	fixedTotal := 0
 	var flexibleIndices []int
@@ -92,7 +92,7 @@ func CalcTitle(title string, selected bool) string {
 		color = "#9cca69"
 		bold = true
 	}
-	width := WindowWidth()
+	width := WindowDimensions().Width
 	repeatCount := max(width-4-len(title), 0)
 	return lipgloss.NewStyle().
 		Bold(bold).
@@ -238,7 +238,7 @@ func FormatArrays[ArrType KnownNetwork | ScannedNetwork](arr []ArrType, selected
 }
 
 func CalculatePadding(s string) int {
-	totalWidth := WindowWidth()
+	totalWidth := WindowDimensions().Width
 	line := strings.Split(s, "\n")[0]
 
 	// Use lipgloss.Width to correctly calculate visible width, ignoring ANSI codes

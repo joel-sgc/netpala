@@ -23,13 +23,17 @@ type NetpalaData struct {
 	VpnData         []common.VpnConnection
 	KnownNetworks   []common.KnownNetwork
 	ScannedNetworks []common.ScannedNetwork
+	
 	Tables          models.TablesModel
 	StatusBar       models.StatusBarData
-	Form            models.WpaEapForm
+	
+	Form           	models.WpaEapForm
+	Overlay        	overlay.Model
+	Confirmation   	models.Confirmation
 
-	NetworkToConnect common.ScannedNetwork
-	IsTyping         bool
-	IsInForm         bool
+	SelectedNetwork	common.ScannedNetwork
+	IsTyping       	bool
+	PopupState     	int	// -1: no popup, 0: form, 1: confirm
 
 	InitialLoadComplete bool
 	Conn                *godbus.Conn
@@ -124,12 +128,20 @@ func NetpalaModel() NetpalaData {
 		VpnData:         []common.VpnConnection{},
 		KnownNetworks:   []common.KnownNetwork{},
 		ScannedNetworks: []common.ScannedNetwork{},
-		StatusBar:       models.ModelStatusBar(),
-		Form:            models.ModelWpaEapForm(),
+		
 		Tables:          models.TablesModel{},
+		StatusBar:       models.ModelStatusBar(),
+		
+		Form:            models.ModelWpaEapForm(),
+		Overlay:         overlay.Model{
+			XPosition: overlay.Left,
+			YPosition: overlay.Center,
+			XOffset:   0,
+			YOffset:   0,
+		},
 
 		IsTyping:            false,
-		IsInForm:            false,
+		PopupState:          -1,
 		InitialLoadComplete: false,
 	}
 }
@@ -149,10 +161,12 @@ func (m NetpalaData) Init() tea.Cmd {
 func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	if m.IsInForm {
+	switch m.PopupState {
+	case 0:
+		// Handle the EAP form popup state
 		switch msg := msg.(type) {
 		case common.ExitFormMsg:
-			m.IsInForm = false
+			m.PopupState = -1
 			m.Form = models.ModelWpaEapForm()
 
 			var formCmd tea.Cmd
@@ -161,7 +175,8 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Form = newForm.(models.WpaEapForm)
 			return m, formCmd
 		case common.SubmitEapFormMsg:
-			m.IsInForm = false
+			m.SelectedEntry = 0
+			m.PopupState = -1
 			m.Form = models.ModelWpaEapForm()
 
 			// Re-initialize the new form with the window size
@@ -182,12 +197,38 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// and combine it with the form's init command.
 			eapCmd := dbus.AddAndConnectEAPCmd(m.Conn, msg.Config, wifiDevice.Path)
 			return m, tea.Batch(formCmd, eapCmd)
-	}	
+		}	
 
 		var newForm tea.Model
 		newForm, cmd = m.Form.Update(msg)
 		m.Form = newForm.(models.WpaEapForm)
 		return m, cmd
+	case 1:
+		// Handle the confirmation popup state
+		switch msg := msg.(type) {
+		case common.SubmitConfirmationMsg:
+			m.PopupState = -1 // Exit popup
+			m.Confirmation = models.ModelConfirmation() // Reset
+
+			if msg.Value { // User confirmed
+				// Delete the known network
+				// NOTE: Ensure m.SelectedNetwork holds the correct data before entering state 1
+				deleteCmd := dbus.DeleteConnectionCmd(m.Conn, m.SelectedNetwork.Path)
+				// Return delete command AND re-arm listener
+				return m, tea.Batch(deleteCmd, dbus.WaitForDBusSignal(m.Conn, m.DBusSignals))
+			} else { // User cancelled
+				// Just return and re-arm listener
+				return m, dbus.WaitForDBusSignal(m.Conn, m.DBusSignals)
+			}
+
+		default: // If it's not a SubmitConfirmationMsg...
+			// Forward the *original* message down to the confirmation model
+			var newConfirmation tea.Model
+			newConfirmation, cmd = m.Confirmation.Update(msg)
+			m.Confirmation = newConfirmation.(models.Confirmation)
+			// Return the confirmation model and any command it produced
+			return m, cmd
+		}
 	}
 
 	switch msg := msg.(type) {
@@ -228,7 +269,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				wifiDevice := m.DeviceData[0]
 
 				// Use the stored network to Connect, not the current selection
-				return m, dbus.AddAndConnectToNetworkCmd(m.Conn, m.NetworkToConnect, password, wifiDevice.Path)
+				return m, dbus.AddAndConnectToNetworkCmd(m.Conn, m.SelectedNetwork, password, wifiDevice.Path)
 			}
 		}
 
@@ -243,11 +284,11 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case common.VpnUpdateMsg:
 		m.VpnData = msg
-		return m, dbus.WaitForDBusSignal(m.Conn, m.DBusSignals)
 
 	case common.KnownNetworksUpdateMsg:
 		m.FilterKnownFromScanned()
 		m.KnownNetworks = msg
+
 		return m, dbus.WaitForDBusSignal(m.Conn, m.DBusSignals)
 
 	case common.ScannedNetworksUpdateMsg:
@@ -262,12 +303,17 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// This is the actual data from a completed scan.
 		m.ScannedNetworks = msg
 		m.FilterKnownFromScanned()
+
 		// No need to re-arm listener here, as it's handled by the debounce logic.
 		return m, nil
 
 	case common.PerformScanRefreshMsg:
 		// The debounce timer fired, now perform the scan.
-		return m, dbus.RequestScan(m.Conn)
+		return m, dbus.GetScanResults(m.Conn)
+
+	case common.RefreshDeviceStatusMsg:
+		// The timer from the 'r' key fired. Refresh device status.
+		return m, dbus.RefreshDevices(m.Conn)
 
 	case common.ErrMsg:
 		m.Err = msg.Err
@@ -289,7 +335,6 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		// case "e":
-		//  return m, openEditorCmd()
 		case "ctrl+c", "ctrl+q", "q", "ctrl+w":
 			m.Conn.RemoveSignal(m.DBusSignals)
 			m.Conn.Close()
@@ -307,7 +352,6 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.selectedBox < len(boxes) && m.SelectedEntry < boxes[m.selectedBox]-1 && !m.IsTyping {
 				m.SelectedEntry++
 			}
-
 		case "shift+tab":
 			if m.selectedBox > 0 {
 				m.selectedBox--
@@ -340,17 +384,35 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, dbus.ConnectToNetworkCmd(m.Conn, selectedNetwork.Path, wifiDevice.Path)
 			} else if m.selectedBox == 4 && len(m.ScannedNetworks) > 0 && len(m.DeviceData) > 0 {
 				// Store the selected network before entering typing mode
-				m.NetworkToConnect = m.ScannedNetworks[m.SelectedEntry]
+				m.SelectedNetwork = m.ScannedNetworks[m.SelectedEntry]
 
-				if m.NetworkToConnect.Security == "wpa2-eap" {
-					m.IsInForm = true
-					m.Form.SSIDSelected = m.NetworkToConnect.SSID
+				if m.SelectedNetwork.Security == "wpa2-eap" {
+					m.Form.SSIDSelected = m.SelectedNetwork.SSID
+					m.PopupState = 0
+
+					m.Overlay = updateOverlayModel(m, &m.Form)
 					return m, nil
 				} else {
 					m.IsTyping = true
 					m.StatusBar.Input.Placeholder = "Enter Wi-Fi Password..."
 					m.StatusBar.Input.Focus()
 				}
+				return m, nil
+			}
+		case "delete":
+			if !m.IsTyping && m.selectedBox == 3 && len(m.KnownNetworks) > 0 {
+				// Delete known network
+				m.SelectedNetwork = common.ScannedNetwork{
+					Path: m.KnownNetworks[m.SelectedEntry].Path,
+					SSID: m.KnownNetworks[m.SelectedEntry].SSID,
+					BSSID: m.KnownNetworks[m.SelectedEntry].BSSID,
+					Security: m.KnownNetworks[m.SelectedEntry].Security,
+					Signal: m.KnownNetworks[m.SelectedEntry].Signal,
+				}
+				m.PopupState = 1
+				m.Confirmation.Message = fmt.Sprintf("Are you sure you want to delete the known network '%s'?\n", m.SelectedNetwork.SSID)
+
+				m.Overlay = updateOverlayModel(m, &m.Confirmation)
 				return m, nil
 			}
 		}
@@ -360,7 +422,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m NetpalaData) View() string {
 	if m.Err != nil {
-		return fmt.Sprintf("\nAn error occurred: %v\n\nPress 'q' to quit.", m.Err)
+		return fmt.Sprintf("An error occurred: %v\n\nPress 'q' to quit.", m.Err)
 	}
 
 	var netsHeight int = 10
@@ -376,18 +438,14 @@ func (m NetpalaData) View() string {
 	m.Tables.KnownNetworks = m.KnownNetworks
 	m.Tables.ScannedNetworks = m.ScannedNetworks
 
-	if m.IsInForm {
-		bgModel := &m.Tables
-		fgModel := &m.Form
-		xPosition := overlay.Left
-		yPosition := overlay.Center
-		xOffset := common.CalculatePadding(m.Form.View())
-		yOffset := 0
-
-		overlayModel := overlay.New(fgModel, bgModel, xPosition, yPosition, xOffset, yOffset)
-
-		return overlayModel.View() + m.StatusBar.View()
-	} else {
+	switch m.PopupState {
+	case 0:
+		m.Overlay = updateOverlayModel(m, &m.Form)
+		return m.Overlay.View() + m.StatusBar.View()
+	case 1:
+		m.Overlay = updateOverlayModel(m, &m.Confirmation)
+		return m.Overlay.View() + m.StatusBar.View()
+	default:
 		return m.Tables.View() + m.StatusBar.View()
 	}
 }
@@ -395,7 +453,21 @@ func (m NetpalaData) View() string {
 func main() {
 	p := tea.NewProgram(NetpalaModel(), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
+		// tea.NewProgram(models.ModelError(err), tea.WithAltScreen()).Run()
 	}
+}
+
+func updateOverlayModel(m NetpalaData, popup tea.Model) overlay.Model {
+	newOverlay := overlay.Model{
+		Background: &m.Tables,
+		Foreground: popup,
+		XPosition:  overlay.Left,
+		YPosition:  overlay.Center,
+		XOffset:    common.CalculatePadding(popup.View()),
+		YOffset:    0,
+	}
+
+	newOverlay.Update(tea.WindowSizeMsg{Width: m.Width, Height: m.Height})
+	return newOverlay
 }

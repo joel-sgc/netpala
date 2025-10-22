@@ -172,7 +172,6 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// --- THIS IS THE NEW LOGIC ---
 	var sm *selector.Model
 
 	// 1. Pass non-key messages (like WindowSizeMsg) to selectors so they can render.

@@ -98,7 +98,7 @@ func (m StatusBarData) View() string {
 	ansi := regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 	clean := ansi.ReplaceAllString(keyHelp, "")
 
-	totalWidth := common.WindowWidth()
+	totalWidth := common.WindowDimensions().Width
 	remainingWidth := totalWidth - (inputLen + len(clean)) - 6 // extra 6 to account for automatic padding
 
 	return m.Input.View() + strings.Repeat(" ", max(remainingWidth, 0)) + keyHelp

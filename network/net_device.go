@@ -27,27 +27,31 @@ func GetDevicesData(c *dbus.Conn) []common.Device {
 	_ = settingsObj.Call("org.freedesktop.NetworkManager.Settings.ListConnections", 0).Store(&connPaths)
 
 	inferSecurity := func(sec map[string]dbus.Variant) string {
-		if sec == nil {
-			return "-"
-		}
-		if v, ok := sec["key-mgmt"]; ok {
-			km := strings.ToLower(v.Value().(string))
-			switch {
-			case strings.Contains(km, "sae"):
-				return "wpa3-sae"
-			case strings.Contains(km, "wpa-psk"):
-				return "wpa2-psk"
-			case strings.Contains(km, "wpa-eap"):
-				return "wpa2-eap"
-			case strings.Contains(km, "none"):
-				return "open"
-			}
-		}
-		if _, ok := sec["psk"]; ok {
-			return "wpa-psk"
-		}
-		return "encrypted"
-	}
+    if sec == nil {
+      return "open"
+    }
+    if v, ok := sec["key-mgmt"]; ok {
+      km := strings.ToLower(v.Value().(string))
+      switch {
+      case strings.Contains(km, "sae"):
+        return "wpa3-sae"
+      case strings.Contains(km, "owe"):
+        return "owe"
+      case strings.Contains(km, "wpa-psk"):
+        return "wpa2-psk"
+      case strings.Contains(km, "wpa-eap"):
+        return "wpa2-eap"
+      case strings.Contains(km, "none"):
+        // "none" key-mgmt inside a security block typically means WEP.
+        return "wep" 
+      }
+    }
+    // Fallback if key-mgmt is missing but a security section exists
+    if _, ok := sec["psk"]; ok {
+      return "wpa-psk"
+    }
+    return "encrypted"
+  }
 
 	var devs []dbus.ObjectPath
 	nm.Call(NMDest+".GetDevices", 0).Store(&devs)

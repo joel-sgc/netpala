@@ -400,6 +400,10 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Open network, connect directly
 					wifiDevice := m.DeviceData[0]
 					return m, dbus.AddAndConnectToNetworkCmd(m.Conn, m.SelectedNetwork, "", wifiDevice.Path)
+				case "owe":
+					// Opportunistically encrypted network, connect directly
+					wifiDevice := m.DeviceData[0]
+					return m, dbus.AddAndConnectToNetworkCmd(m.Conn, m.SelectedNetwork, "", wifiDevice.Path)
 				default:
 					// Most common case: prompt for password
 					m.IsTyping = true

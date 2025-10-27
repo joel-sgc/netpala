@@ -100,24 +100,30 @@ func GetKnownNetworks(conn *dbus.Conn) []common.KnownNetwork {
 				auto = av.Value().(bool)
 			}
 		}
-		sec := "open"
-		if wsec, ok := s["802-11-wireless-security"]; ok {
-			if km, ok := wsec["key-mgmt"]; ok {
-				kmStr := strings.ToLower(km.Value().(string))
-				switch {
-				case strings.Contains(kmStr, "sae"):
-					sec = "wpa3-sae"
-				case strings.Contains(kmStr, "wpa-psk"):
-					sec = "wpa2-psk"
-				case strings.Contains(kmStr, "wpa-eap"):
-					sec = "wpa2-eap"
-				case strings.Contains(kmStr, "none"):
-					sec = "wep"
-				default:
-					sec = "encrypted"
-				}
-			}
-		}
+		sec := "open" // Default for no security section
+    if wsec, ok := s["802-11-wireless-security"]; ok {
+      if km, ok := wsec["key-mgmt"]; ok {
+        kmStr := strings.ToLower(km.Value().(string))
+        switch {
+        case strings.Contains(kmStr, "sae"):
+          sec = "wpa3-sae"
+        case strings.Contains(kmStr, "owe"):
+          sec = "owe"
+        case strings.Contains(kmStr, "wpa-psk"):
+          sec = "wpa2-psk"
+        case strings.Contains(kmStr, "wpa-eap"):
+          sec = "wpa2-eap"
+        case strings.Contains(kmStr, "none"):
+          sec = "wep"
+        default:
+          sec = "encrypted"
+        }
+      } else {
+				// Security section exists but has no key-mgmt.
+				// Could be WEP or other.
+				sec = "encrypted"
+      }
+    }
 		apInfo := aps[ss]
 		known = append(known, common.KnownNetwork{
 

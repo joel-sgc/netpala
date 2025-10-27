@@ -377,8 +377,9 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Enable/Disable Wifi Card
 				return m, dbus.ToggleWifiCmd(m.Conn, !m.DeviceData[0].Powered)
 			} else if m.selectedBox == 2 && len(m.VpnData) > 0 && len(m.DeviceData) > 0 {
-				// Connect to VPN
-
+				// Toggle VPN
+				selectedVpn := m.VpnData[m.SelectedEntry]
+				return m, dbus.ToggleVpnCmd(m.Conn, selectedVpn.Path, selectedVpn.ActivePath, !selectedVpn.Connected)
 			} else if m.selectedBox == 3 && len(m.KnownNetworks) > 0 && len(m.DeviceData) > 0 {
 				// Connect to known network
 				selectedNetwork := m.KnownNetworks[m.SelectedEntry]

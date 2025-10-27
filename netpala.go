@@ -388,13 +388,19 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Store the selected network before entering typing mode
 				m.SelectedNetwork = m.ScannedNetworks[m.SelectedEntry]
 
-				if m.SelectedNetwork.Security == "wpa2-eap" {
+				switch m.SelectedNetwork.Security {
+				case "wpa2-eap":
 					m.Form.SSIDSelected = m.SelectedNetwork.SSID
 					m.PopupState = 0
 
 					m.Overlay = updateOverlayModel(m, &m.Form)
 					return m, nil
-				} else {
+				case "open":
+					// Open network, connect directly
+					wifiDevice := m.DeviceData[0]
+					return m, dbus.AddAndConnectToNetworkCmd(m.Conn, m.SelectedNetwork, "", wifiDevice.Path)
+				default:
+					// Most common case: prompt for password
 					m.IsTyping = true
 					m.StatusBar.Input.Placeholder = "Enter Wi-Fi Password..."
 					m.StatusBar.Input.Focus()

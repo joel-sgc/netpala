@@ -127,7 +127,7 @@ func GetKnownNetworks(conn *dbus.Conn) []common.KnownNetwork {
 		apInfo := aps[ss]
 		known = append(known, common.KnownNetwork{
 
-			Path: c, SSID: ss, Security: sec, Connected: apInfo.Connected, Hidden: hidden,
+			Path: c, SSID: common.SanitizeSSID(ss, "[?]"), Security: sec, Connected: apInfo.Connected, Hidden: hidden,
 			AutoConnect: auto, Signal: apInfo.Signal, BSSID: apInfo.BSSID,
 		})
 	}

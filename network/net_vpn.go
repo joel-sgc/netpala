@@ -80,7 +80,7 @@ func GetVpnData(c *dbus.Conn) []common.VpnConnection {
 			vpnList = append(vpnList, common.VpnConnection{
 				Path:       path,
 				ActivePath: activePath, // Store the active path
-				Name:       name,
+				Name:       common.SanitizeSSID(name, "[?]"),
 				ConnType:   friendlyType,
 				Connected:  isConnected,
 			})

@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -31,58 +32,53 @@ func freqToBand(freq int) string {
 	}
 }
 
-func padHeaders(headers []string, headersLengths []int) []string {
+func padHeaders(headers []string, headerLengths []int) []string {
 	if len(headers) == 0 {
 		return headers
 	}
-	totalWidth := max(WindowDimensions().Width-2, 1)
-	numHeaders := len(headers)
-	fixedTotal := 0
-	var flexibleIndices []int
-	for i, length := range headersLengths {
-		if length > 0 {
-			fixedTotal += length + 4
-		} else {
-			flexibleIndices = append(flexibleIndices, i)
+
+	// Fallback: if no lengths provided, auto-fill with -1 (flex)
+	if headerLengths == nil || len(headerLengths) != len(headers) {
+		headerLengths = make([]int, len(headers))
+		for i := range headerLengths {
+			headerLengths[i] = -1
 		}
 	}
-	remainingWidth := totalWidth - fixedTotal
-	if remainingWidth < 0 {
-		remainingWidth = 0
-	}
-	flexColWidth := 0
-	if len(flexibleIndices) > 0 {
-		flexColWidth = remainingWidth / len(flexibleIndices)
-	}
-	for i := range headers {
-		var leftPaddingCount, rightPaddingCount int
-		var colWidth int
-		if headersLengths[i] > 0 {
-			leftPaddingCount = 2
-			rightPaddingCount = 2
+
+	// Calculate remaining width after fixed columns
+	fixedWidth := 0
+	flexCount := 0
+	for _, w := range headerLengths {
+		if w == -1 {
+			flexCount++
 		} else {
-			colWidth = flexColWidth
-			headerLen := len(headers[i])
-			extra := colWidth - headerLen
-			if extra <= 0 {
-				continue
-			}
-			leftPaddingCount = extra / 2
-			rightPaddingCount = extra - leftPaddingCount
+			fixedWidth += w
 		}
-		leftPadding := strings.Repeat(" ", leftPaddingCount)
-		rightPadding := strings.Repeat(" ", rightPaddingCount)
-		headers[i] = fmt.Sprintf("%s%s%s", leftPadding, headers[i], rightPadding)
 	}
-	currentTotal := 0
-	for _, h := range headers {
-		currentTotal += len(h)
+
+	remaining := max(max(WindowDimensions().Width-2, 1) - fixedWidth, 0)
+
+	flexWidth := 0
+	if flexCount > 0 {
+		flexWidth = remaining / flexCount
 	}
-	diff := totalWidth - currentTotal
-	for i := range diff {
-		headers[i%numHeaders] += " "
+
+	finalHeaders := make([]string, len(headers))
+	for i, h := range headers {
+		width := headerLengths[i]
+		if width == -1 {
+			width = flexWidth
+		}
+		if width < 1 {
+			width = 1
+		}
+		finalHeaders[i] = lipgloss.NewStyle().
+			Width(width).
+			Align(lipgloss.Center).
+			Render(h)
 	}
-	return headers
+
+	return finalHeaders
 }
 
 func CalcTitle(title string, selected bool) string {
@@ -141,7 +137,14 @@ func FormatDeviceData(devices []Device) [][]string {
 		if d.Powered {
 			powered = "On"
 		}
+
 		row := []string{d.Name, d.Mode, powered, d.Address}
+		for i := range row {
+			if lipgloss.Width(row[i]) > lipgloss.Width(data[0][i]) {
+				row[i] = row[i][:max(0, lipgloss.Width(data[0][i])-3)] + "..."
+			}
+		}
+		
 		data = append(data, row)
 	}
 	return data
@@ -162,6 +165,12 @@ func FormatStationData(devices []Device) [][]string {
 			state = "connected"
 		}
 		row := []string{state, strconv.FormatBool(d.Scanning), freqToBand(d.Frequency), d.Security}
+		for i := range row {
+			if lipgloss.Width(row[i]) > lipgloss.Width(data[0][i]) {
+				row[i] = row[i][:max(0, lipgloss.Width(data[0][i])-3)] + "..."
+			}
+		}
+
 		data = append(data, row)
 	}
 	return data
@@ -178,6 +187,12 @@ func FormatVpnData(vpns []VpnConnection) [][]string {
 		}
 
 		row := []string{state, vpn.Name, vpn.ConnType}
+		for i := range row {
+			if lipgloss.Width(row[i]) > lipgloss.Width(data[0][i]) {
+				row[i] = row[i][:max(0, lipgloss.Width(data[0][i])-3)] + "..."
+			}
+		}
+
 		data = append(data, row)
 	}
 	return data
@@ -185,7 +200,7 @@ func FormatVpnData(vpns []VpnConnection) [][]string {
 
 func FormatKnownNetworksData(networks []KnownNetwork, selectedRow int, height int) [][]string {
 	base := [][]string{
-		padHeaders([]string{"", "Name", "Security", "Hidden", "Auto Connect", "Signal"}, []int{5, -1, 23, 5, 5, 6}), {""},
+		padHeaders([]string{"", "Name", "Security", "Hidden", "Auto Connect", "Signal"}, []int{5, -1, 23, 6, 12, 6}), {""},
 	}
 	window := FormatArrays(networks, selectedRow, height)
 	for _, n := range window {
@@ -193,7 +208,13 @@ func FormatKnownNetworksData(networks []KnownNetwork, selectedRow int, height in
 		if n.Connected {
 			connected = "  >  "
 		}
-		row := []string{connected, n.SSID, n.Security, strconv.FormatBool(n.Hidden), strconv.FormatBool(n.AutoConnect), strconv.Itoa(n.Signal) + "%"}
+		row := []string{connected, strings.TrimSpace(n.SSID), n.Security, strconv.FormatBool(n.Hidden), strconv.FormatBool(n.AutoConnect), strconv.Itoa(n.Signal) + "%"}
+		for i := range row {
+			if len(row[i]) > lipgloss.Width(base[0][i]) {
+				row[i] = row[i][:max(0, lipgloss.Width(base[0][i])-3)] + "..."
+			}
+		}
+		
 		base = append(base, row)
 	}
 
@@ -213,6 +234,12 @@ func FormatScannedNetworksData(networks []ScannedNetwork, selectedRow int, heigh
 	window := FormatArrays(networks, selectedRow, height)
 	for _, n := range window {
 		row := []string{n.SSID, n.Security, strconv.Itoa(n.Signal) + "%"}
+		for i := range row {
+			if lipgloss.Width(row[i]) > lipgloss.Width(data[0][i]) {
+				row[i] = row[i][:max(0, lipgloss.Width(data[0][i])-3)] + "..."
+			}
+		}
+		
 		data = append(data, row)
 	}
 	for i := 0; i < height-len(networks); i++ {
@@ -246,4 +273,10 @@ func CalculatePadding(s string) int {
 
 	// Calculate padding and ensure it's not negative
 	return max(0, (totalWidth-textWidth)/2)
+}
+
+func SanitizeSSID(s, replacement string) string {
+	// Unicode regex range for emojis — covers most common sets (Emoticons, Misc Symbols, Transport, etc.)
+	re := regexp.MustCompile(`[\p{So}\p{Sk}\p{Cs}\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{1F300}-\x{1F6FF}]+`)
+	return re.ReplaceAllString(s, replacement)
 }

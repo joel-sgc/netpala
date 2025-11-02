@@ -56,7 +56,7 @@ func padHeaders(headers []string, headerLengths []int) []string {
 		}
 	}
 
-	remaining := max(max(WindowDimensions().Width-2, 1) - fixedWidth, 0)
+	remaining := max(WindowDimensions().Width-2 - fixedWidth, 1)
 
 	flexWidth := 0
 	if flexCount > 0 {
@@ -200,7 +200,7 @@ func FormatVpnData(vpns []VpnConnection) [][]string {
 
 func FormatKnownNetworksData(networks []KnownNetwork, selectedRow int, height int) [][]string {
 	base := [][]string{
-		padHeaders([]string{"", "Name", "Security", "Hidden", "Auto Connect", "Signal"}, []int{5, -1, 23, 6, 12, 6}), {""},
+		padHeaders([]string{"", "Name", "Security", "Hidden", "Auto Connect", "Signal"}, []int{5, -1, 12, 10, 16, 10}), {""},
 	}
 	window := FormatArrays(networks, selectedRow, height)
 	for _, n := range window {
@@ -228,8 +228,10 @@ func FormatKnownNetworksData(networks []KnownNetwork, selectedRow int, height in
 }
 
 func FormatScannedNetworksData(networks []ScannedNetwork, selectedRow int, height int) [][]string {
+	totalWidth := WindowDimensions().Width - 2
+
 	data := [][]string{
-		padHeaders([]string{"Name", "Security", "Signal"}, []int{-1, -1, -1}), {""},
+		padHeaders([]string{"Name", "Security", "Signal"}, []int{totalWidth/2, totalWidth/4, totalWidth/4}), {""},
 	}
 	window := FormatArrays(networks, selectedRow, height)
 	for _, n := range window {

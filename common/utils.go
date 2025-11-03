@@ -246,8 +246,12 @@ func FormatKnownNetworksData(networks []KnownNetwork, selectedRow int, height in
 func FormatScannedNetworksData(networks []ScannedNetwork, selectedRow int, height int) [][]string {
 	totalWidth := WindowDimensions().Width - 2
 
+	signalWidth := totalWidth / 4
+	securityWidth := (totalWidth / 4) + totalWidth % 4
+
+
 	data := [][]string{
-		padHeaders([]string{"Name", "Security", "Signal"}, []int{totalWidth/2, totalWidth/4, totalWidth/4}), {""},
+		padHeaders([]string{"Name", "Security", "Signal"}, []int{-1, securityWidth, signalWidth}), {""},
 	}
 	window := FormatArrays(networks, selectedRow, height)
 	for _, n := range window {

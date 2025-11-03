@@ -438,14 +438,15 @@ func (m NetpalaData) View() string {
 		return fmt.Sprintf("An error occurred: %v\n\nPress 'q' to quit.", m.Err)
 	}
 
-	var netsHeight int = 10
+	netsHeight := common.WindowDimensions().Height - 18
 	if len(m.VpnData) > 0 {
-		netsHeight = 8
+		netsHeight -= 5
 	}
 
 	m.Tables.SelectedBox = m.selectedBox
 	m.Tables.SelectedEntry = m.SelectedEntry
-	m.Tables.NetsHeight = netsHeight
+	m.Tables.KnownHeight = netsHeight / 2
+	m.Tables.ScannedHeight = netsHeight - (netsHeight / 2)
 	m.Tables.DeviceData = m.DeviceData
 	m.Tables.VpnData = m.VpnData
 	m.Tables.KnownNetworks = m.KnownNetworks

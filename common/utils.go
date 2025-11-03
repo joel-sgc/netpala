@@ -45,33 +45,49 @@ func padHeaders(headers []string, headerLengths []int) []string {
 		}
 	}
 
-	// Calculate remaining width after fixed columns
+	availableWidth := max(WindowDimensions().Width-2, 1)
+
+	// Calculate fixed width and identify flexible columns
 	fixedWidth := 0
-	flexCount := 0
-	for _, w := range headerLengths {
+	flexColumns := []int{} // indices of flexible columns
+	for i, w := range headerLengths {
 		if w == -1 {
-			flexCount++
+			flexColumns = append(flexColumns, i)
 		} else {
 			fixedWidth += w
 		}
 	}
 
-	remaining := max(WindowDimensions().Width-2 - fixedWidth, 1)
+	remaining := max(availableWidth - fixedWidth, 0)
 
-	flexWidth := 0
+	// Calculate base width and remainder for flexible columns
+	flexCount := len(flexColumns)
+	baseWidth := 0
+	remainder := 0
+	
 	if flexCount > 0 {
-		flexWidth = remaining / flexCount
+		baseWidth = remaining / flexCount
+		remainder = remaining % flexCount
 	}
 
+	// Distribute widths to flexible columns, handling remainder
+	flexWidths := make([]int, flexCount)
+	for i := range flexWidths {
+		flexWidths[i] = baseWidth
+		if i < remainder {
+			flexWidths[i]++
+		}
+	}
+
+	// Assign the calculated widths back to headerLengths
+	for i, flexIndex := range flexColumns {
+		headerLengths[flexIndex] = flexWidths[i]
+	}
+
+	// Render headers with their respective widths
 	finalHeaders := make([]string, len(headers))
 	for i, h := range headers {
-		width := headerLengths[i]
-		if width == -1 {
-			width = flexWidth
-		}
-		if width < 1 {
-			width = 1
-		}
+		width := max(headerLengths[i], 1)
 		finalHeaders[i] = lipgloss.NewStyle().
 			Width(width).
 			Align(lipgloss.Center).

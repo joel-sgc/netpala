@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -58,13 +59,13 @@ func padHeaders(headers []string, headerLengths []int) []string {
 		}
 	}
 
-	remaining := max(availableWidth - fixedWidth, 0)
+	remaining := max(availableWidth-fixedWidth, 0)
 
 	// Calculate base width and remainder for flexible columns
 	flexCount := len(flexColumns)
 	baseWidth := 0
 	remainder := 0
-	
+
 	if flexCount > 0 {
 		baseWidth = remaining / flexCount
 		remainder = remaining % flexCount
@@ -120,7 +121,7 @@ var BoxBorder = lipgloss.Border{
 var ActiveBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#9cca69"))
 var InactiveBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#a7abca"))
 
-func BoxStyle(selectedRow int, selectedBox bool) func(row, col int) lipgloss.Style {
+func BoxStyle(selectedRow int, selectedBox bool, height int) func(row, col int) lipgloss.Style {
 	return func(row int, col int) lipgloss.Style {
 		switch {
 		case row == 0:
@@ -133,7 +134,7 @@ func BoxStyle(selectedRow int, selectedBox bool) func(row, col int) lipgloss.Sty
 					return lipgloss.Color("#a7abca")
 				}()).
 				AlignHorizontal(lipgloss.Center)
-		case row == min(selectedRow+2, 11) && selectedBox:
+		case row == min(selectedRow+2, height+1) && selectedBox:
 			return lipgloss.NewStyle().
 				Background(lipgloss.Color("#a7abca")).
 				Foreground(lipgloss.Color("#444a66")).
@@ -160,7 +161,7 @@ func FormatDeviceData(devices []Device) [][]string {
 				row[i] = row[i][:max(0, lipgloss.Width(data[0][i])-3)] + "..."
 			}
 		}
-		
+
 		data = append(data, row)
 	}
 	return data
@@ -230,7 +231,7 @@ func FormatKnownNetworksData(networks []KnownNetwork, selectedRow int, height in
 				row[i] = row[i][:max(0, lipgloss.Width(base[0][i])-3)] + "..."
 			}
 		}
-		
+
 		base = append(base, row)
 	}
 
@@ -247,8 +248,7 @@ func FormatScannedNetworksData(networks []ScannedNetwork, selectedRow int, heigh
 	totalWidth := WindowDimensions().Width - 2
 
 	signalWidth := totalWidth / 4
-	securityWidth := (totalWidth / 4) + totalWidth % 4
-
+	securityWidth := (totalWidth / 4) + totalWidth%4
 
 	data := [][]string{
 		padHeaders([]string{"Name", "Security", "Signal"}, []int{-1, securityWidth, signalWidth}), {""},
@@ -261,7 +261,7 @@ func FormatScannedNetworksData(networks []ScannedNetwork, selectedRow int, heigh
 				row[i] = row[i][:max(0, lipgloss.Width(data[0][i])-3)] + "..."
 			}
 		}
-		
+
 		data = append(data, row)
 	}
 	for i := 0; i < height-len(networks); i++ {
@@ -301,4 +301,18 @@ func SanitizeSSID(s, replacement string) string {
 	// Unicode regex range for emojis — covers most common sets (Emoticons, Misc Symbols, Transport, etc.)
 	re := regexp.MustCompile(`[\p{So}\p{Sk}\p{Cs}\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{1F300}-\x{1F6FF}]+`)
 	return re.ReplaceAllString(s, replacement)
+}
+
+func SortDevicesBySignal(devices []ScannedNetwork) {
+	slices.SortFunc(devices, func(a, b ScannedNetwork) int {
+		// Primary sort: Signal descending (higher is better)
+		if a.Signal > b.Signal {
+			return -1
+		}
+		if a.Signal < b.Signal {
+			return 1
+		}
+		// Secondary sort: SSID ascending (case-insensitive)
+		return strings.Compare(strings.ToLower(a.SSID), strings.ToLower(b.SSID))
+	})
 }

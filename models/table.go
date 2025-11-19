@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss/table"
+	"go.dalton.dog/bubbleup"
 )
 
 type TableData struct {
@@ -12,6 +13,9 @@ type TableData struct {
 	isTableSelected bool
 	selectedRow     int
 	height          int
+	alert						bubbleup.AlertModel
+	err							error
+	
 	deviceData      []common.Device
 	stationData     []common.Device
 	vpnData         []common.VpnConnection
@@ -31,15 +35,16 @@ func TableModel(
 	scannedNets []common.ScannedNetwork,
 ) TableData {
 	return TableData{
-		title:           title,
-		isTableSelected: isTableSelected,
-		selectedRow:     selectedRow,
-		height:          height,
-		deviceData:      devData,
-		stationData:     stationData,
-		vpnData:         vpnData,
-		knownNetworks:   knownNets,
-		scannedNetworks: scannedNets,
+		title:           	title,
+		isTableSelected: 	isTableSelected,
+		selectedRow:     	selectedRow,
+		height:          	height,
+
+		deviceData:      	devData,
+		stationData:     	stationData,
+		vpnData:         	vpnData,
+		knownNetworks:   	knownNets,
+		scannedNetworks: 	scannedNets,
 	}
 }
 
@@ -74,7 +79,7 @@ func (m TableData) View() string {
 		Border(common.BoxBorder).
 		BorderColumn(false).
 		BorderStyle(borderStyle).
-		StyleFunc(common.BoxStyle(m.selectedRow, m.isTableSelected)).
+		StyleFunc(common.BoxStyle(m.selectedRow, m.isTableSelected, m.height)).
 		Rows(tableData...)
 
 	return (common.CalcTitle(m.title, m.isTableSelected) + table.Render()) + "\n"

@@ -30,8 +30,8 @@ type PeriodicRefreshMsg struct{}
 type RefreshKnownNetworksMsg struct{}
 type PerformScanRefreshMsg struct{}
 type OptimisticAddMsg struct {
-    SSID     string
-    Security string
+	SSID     string
+	Security string
 }
 
 type ExitFormMsg struct{}

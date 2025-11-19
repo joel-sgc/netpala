@@ -6,12 +6,12 @@ import (
 	"netpala/dbus"
 	"netpala/models"
 	"netpala/network"
-	"os"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	godbus "github.com/godbus/dbus/v5"
 	overlay "github.com/rmhubbert/bubbletea-overlay"
+	"go.dalton.dog/bubbleup"
 )
 
 type NetpalaData struct {
@@ -23,18 +23,19 @@ type NetpalaData struct {
 	VpnData         []common.VpnConnection
 	KnownNetworks   []common.KnownNetwork
 	ScannedNetworks []common.ScannedNetwork
-	
-	Tables          models.TablesModel
-	StatusBar       models.StatusBarData
-	
-	Form           	models.WpaEapForm
-	Overlay        	overlay.Model
-	Confirmation   	models.Confirmation
 
-	SelectedNetwork	common.ScannedNetwork
-	IsTyping       	bool
-	PopupState     	int	// -1: no popup, 0: form, 1: confirm
+	Tables    models.TablesModel
+	StatusBar models.StatusBarData
 
+	Form         models.WpaEapForm
+	Overlay      overlay.Model
+	Confirmation models.Confirmation
+
+	SelectedNetwork common.ScannedNetwork
+	IsTyping        bool
+	PopupState      int // -1: no popup, 0: form, 1: confirm
+
+	Alert               bubbleup.AlertModel
 	InitialLoadComplete bool
 	Conn                *godbus.Conn
 	Err                 error
@@ -62,6 +63,7 @@ func loadInitialData(Conn *godbus.Conn) tea.Cmd {
 				filteredScanned = append(filteredScanned, s)
 			}
 		}
+		common.SortDevicesBySignal(filteredScanned)
 
 		// Step 3: Send the final, filtered data to the UI in a single batch.
 		return tea.BatchMsg{
@@ -119,21 +121,24 @@ func NetpalaModel() NetpalaData {
 		}
 	}
 
+	alert := bubbleup.NewAlertModel(40, true, 10)
+
 	return NetpalaData{
 		Conn:        Conn,
 		Err:         err,
 		DBusSignals: sigChan,
+		Alert:       *alert,
 
 		DeviceData:      []common.Device{},
 		VpnData:         []common.VpnConnection{},
 		KnownNetworks:   []common.KnownNetwork{},
 		ScannedNetworks: []common.ScannedNetwork{},
-		
-		Tables:          models.TablesModel{},
-		StatusBar:       models.ModelStatusBar(),
-		
-		Form:            models.ModelWpaEapForm(),
-		Overlay:         overlay.Model{
+
+		Tables:    models.TablesModel{},
+		StatusBar: models.ModelStatusBar(),
+
+		Form: models.ModelWpaEapForm(),
+		Overlay: overlay.Model{
 			XPosition: overlay.Left,
 			YPosition: overlay.Center,
 			XOffset:   0,
@@ -147,11 +152,8 @@ func NetpalaModel() NetpalaData {
 }
 
 func (m NetpalaData) Init() tea.Cmd {
-	if m.Err != nil {
-		return nil
-	}
-
 	return tea.Batch(
+		m.Alert.Init(),
 		loadInitialData(m.Conn),
 		dbus.RefreshTicker(),
 		dbus.WaitForDBusSignal(m.Conn, m.DBusSignals),
@@ -197,7 +199,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// and combine it with the form's init command.
 			eapCmd := dbus.AddAndConnectEAPCmd(m.Conn, msg.Config, wifiDevice.Path)
 			return m, tea.Batch(formCmd, eapCmd)
-		}	
+		}
 
 		var newForm tea.Model
 		newForm, cmd = m.Form.Update(msg)
@@ -207,7 +209,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle the confirmation popup state
 		switch msg := msg.(type) {
 		case common.SubmitConfirmationMsg:
-			m.PopupState = -1 // Exit popup
+			m.PopupState = -1                           // Exit popup
 			m.Confirmation = models.ModelConfirmation() // Reset
 
 			if msg.Value { // User confirmed
@@ -312,8 +314,16 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, dbus.GetScanResults(m.Conn)
 
 	case common.ErrMsg:
+		// 1. Generate the command. This command produces the internal 'alertMsg'
+		//    that the AlertModel is waiting for.
+		alertCmd := m.Alert.NewAlertCmd(bubbleup.ErrorKey, "Error: "+msg.Err.Error())
+
+		// 2. Update the main model's error state.
 		m.Err = msg.Err
-		return m, nil		
+
+		// 3. Return the command.
+		// NOTE: Do NOT call m.Alert.Update(msg) here.
+		return m, alertCmd
 
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
@@ -330,21 +340,19 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		// case "e":
 		case "ctrl+c", "ctrl+q", "q", "ctrl+w":
 			m.Conn.RemoveSignal(m.DBusSignals)
 			m.Conn.Close()
 			return m, tea.Quit
 
-	case "r":
-		var cmds []tea.Cmd
-		cmds = append(cmds, dbus.RequestScan(m.Conn))
-		cmds = append(cmds, func() tea.Msg {
-			return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(m.Conn))
-		})
+		case "r":
+			var cmds []tea.Cmd
+			cmds = append(cmds, dbus.RequestScan(m.Conn))
+			cmds = append(cmds, func() tea.Msg {
+				return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(m.Conn))
+			})
 
-		return m, tea.Batch(cmds...)
-
+			return m, tea.Batch(cmds...)
 		case "up", "k":
 			if m.SelectedEntry > 0 && !m.IsTyping {
 				m.SelectedEntry--
@@ -416,11 +424,11 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.IsTyping && m.selectedBox == 3 && len(m.KnownNetworks) > 0 {
 				// Delete known network
 				m.SelectedNetwork = common.ScannedNetwork{
-					Path: m.KnownNetworks[m.SelectedEntry].Path,
-					SSID: m.KnownNetworks[m.SelectedEntry].SSID,
-					BSSID: m.KnownNetworks[m.SelectedEntry].BSSID,
+					Path:     m.KnownNetworks[m.SelectedEntry].Path,
+					SSID:     m.KnownNetworks[m.SelectedEntry].SSID,
+					BSSID:    m.KnownNetworks[m.SelectedEntry].BSSID,
 					Security: m.KnownNetworks[m.SelectedEntry].Security,
-					Signal: m.KnownNetworks[m.SelectedEntry].Signal,
+					Signal:   m.KnownNetworks[m.SelectedEntry].Signal,
 				}
 				m.PopupState = 1
 				m.Confirmation.Message = fmt.Sprintf("Are you sure you want to delete the known network '%s'?\n", m.SelectedNetwork.SSID)
@@ -430,14 +438,14 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	return m, nil
+
+	var updatedAlert tea.Model
+	updatedAlert, cmd = m.Alert.Update(msg)
+	m.Alert = updatedAlert.(bubbleup.AlertModel)
+	return m, cmd
 }
 
 func (m NetpalaData) View() string {
-	if m.Err != nil {
-		return fmt.Sprintf("An error occurred: %v\n\nPress 'q' to quit.", m.Err)
-	}
-
 	netsHeight := common.WindowDimensions().Height - 18
 	if len(m.VpnData) > 0 {
 		netsHeight -= 5
@@ -455,19 +463,19 @@ func (m NetpalaData) View() string {
 	switch m.PopupState {
 	case 0:
 		m.Overlay = updateOverlayModel(m, &m.Form)
-		return m.Overlay.View() + m.StatusBar.View()
+		return m.Alert.Render(m.Overlay.View() + m.StatusBar.View())
 	case 1:
 		m.Overlay = updateOverlayModel(m, &m.Confirmation)
-		return m.Overlay.View() + m.StatusBar.View()
+		return m.Alert.Render(m.Overlay.View() + m.StatusBar.View())
 	default:
-		return m.Tables.View() + m.StatusBar.View()
+		return m.Alert.Render(m.Tables.View() + m.StatusBar.View())
 	}
 }
 
 func main() {
 	p := tea.NewProgram(NetpalaModel(), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
-		os.Exit(1)
+		// os.Exit(1)
 		// tea.NewProgram(models.ModelError(err), tea.WithAltScreen()).Run()
 	}
 }

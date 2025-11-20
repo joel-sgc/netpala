@@ -3,7 +3,8 @@
   <h2> Netpala (Impala Go Edition) </h2>
 </div>
 
-A lightweight (hopefully) terminal-friendly NetworkManager + wpa_supplicant wrapper written in Go.
+
+A lightweight (hopefully) terminal-friendly NetworkManager wrapper written in Go.
 It’s a clone of Impala, because Impala’s UI made a single majestic white tear roll down my leg.
 
 ---
@@ -17,6 +18,7 @@ It’s a clone of Impala, because Impala’s UI made a single majestic white tea
 ## 💡 Prerequisites
 
 A Linux-based OS with NetworkManager and dbus running.
+**Compatible with both wpa_supplicant and iwd backends.**
 
 ---
 
@@ -25,6 +27,24 @@ A Linux-based OS with NetworkManager and dbus running.
 ### Binary Release
 
 Pre-built binaries coming soon.
+
+---
+
+### Install from AUR
+
+```bash
+# Using yay
+yay -S netpala
+
+# Or using paru
+paru -S netpala
+```
+
+You'll need:
+
+Go 1.25.4+ (only for building AUR package locally)
+- NetworkManager running
+- dbus available
 
 ---
 
@@ -39,17 +59,17 @@ go build
 
 You'll need:
 
-- Go 1.25.1+
+- Go 1.25.4+
 - NetworkManager running
 - dbus available
 
 ---
 
-### Omarchy / Hyprland launcher example
+### Omarchy / Waybar launcher example
 
 ```bash
 #!/bin/bash
-exec setsid uwsm-app -- xdg-terminal-exec --app-id=com.omarchy.Impala -e ~/netpala/netpala \"$@\"
+exec setsid uwsm-app -- xdg-terminal-exec --app-id=com.omarchy.Impala -e netpala \"$@\"
 ```
 
 ---
@@ -89,8 +109,8 @@ exec setsid uwsm-app -- xdg-terminal-exec --app-id=com.omarchy.Impala -e ~/netpa
 
 ## ⚠️ Missing / TODO
 
-- VPN manager UI (partially implemented but prone to crashes)
-- Probably some bugs
+- VPN manager UI Testing (Should work but haven't been able to test 100%)
+- Probably some bugs (Hopefully there's nothing)
 
 ---
 

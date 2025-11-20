@@ -27,31 +27,31 @@ func GetDevicesData(c *dbus.Conn) []common.Device {
 	_ = settingsObj.Call("org.freedesktop.NetworkManager.Settings.ListConnections", 0).Store(&connPaths)
 
 	inferSecurity := func(sec map[string]dbus.Variant) string {
-    if sec == nil {
-      return "open"
-    }
-    if v, ok := sec["key-mgmt"]; ok {
-      km := strings.ToLower(v.Value().(string))
-      switch {
-      case strings.Contains(km, "sae"):
-        return "wpa3-sae"
-      case strings.Contains(km, "owe"):
-        return "owe"
-      case strings.Contains(km, "wpa-psk"):
-        return "wpa2-psk"
-      case strings.Contains(km, "wpa-eap"):
-        return "wpa2-eap"
-      case strings.Contains(km, "none"):
-        // "none" key-mgmt inside a security block typically means WEP.
-        return "wep" 
-      }
-    }
-    // Fallback if key-mgmt is missing but a security section exists
-    if _, ok := sec["psk"]; ok {
-      return "wpa-psk"
-    }
-    return "encrypted"
-  }
+		if sec == nil {
+			return "open"
+		}
+		if v, ok := sec["key-mgmt"]; ok {
+			km := strings.ToLower(v.Value().(string))
+			switch {
+			case strings.Contains(km, "sae"):
+				return "wpa3-sae"
+			case strings.Contains(km, "owe"):
+				return "owe"
+			case strings.Contains(km, "wpa-psk"):
+				return "wpa2-psk"
+			case strings.Contains(km, "wpa-eap"):
+				return "wpa2-eap"
+			case strings.Contains(km, "none"):
+				// "none" key-mgmt inside a security block typically means WEP.
+				return "wep"
+			}
+		}
+		// Fallback if key-mgmt is missing but a security section exists
+		if _, ok := sec["psk"]; ok {
+			return "wpa-psk"
+		}
+		return "encrypted"
+	}
 
 	var devs []dbus.ObjectPath
 	nm.Call(NMDest+".GetDevices", 0).Store(&devs)
@@ -59,9 +59,21 @@ func GetDevicesData(c *dbus.Conn) []common.Device {
 	for _, d := range devs {
 		obj := c.Object(NMDest, d)
 		dp := GetProps(obj, DevIF)
-		if dp["DeviceType"].Value().(uint32) != 2 {
+
+		// --- FIX START: Safe DeviceType Check ---
+		// When a VPN disconnects, the device might exist in the list 'devs',
+		// but by the time we fetch props, it's gone or empty.
+		rawType := dp["DeviceType"].Value()
+		if rawType == nil {
 			continue
 		}
+
+		// Safely check type assertion
+		dType, ok := rawType.(uint32)
+		if !ok || dType != 2 { // 2 == Wifi
+			continue
+		}
+		// --- FIX END ---
 
 		var deviceState int = -1 // Default to disconnected
 		if stateVar, ok := dp["State"]; ok {
@@ -76,11 +88,23 @@ func GetDevicesData(c *dbus.Conn) []common.Device {
 			}
 		}
 
-		iface := dp["Interface"].Value().(string)
-		mac := strings.ToLower(dp["HwAddress"].Value().(string))
+		// Defensive check for Interface name and HW Address
+		// Usually safe if DeviceType check passed, but good practice.
+		iface := "unknown"
+		if v := dp["Interface"].Value(); v != nil {
+			iface, _ = v.(string)
+		}
+
+		mac := "00:00:00:00:00:00"
+		if v := dp["HwAddress"].Value(); v != nil {
+			if s, ok := v.(string); ok {
+				mac = strings.ToLower(s)
+			}
+		}
+
 		wp := GetProps(obj, WifiIF)
-		mode := wp["Mode"].Value().(uint32)
-		ap := wp["ActiveAccessPoint"].Value().(dbus.ObjectPath)
+		mode, _ := wp["Mode"].Value().(uint32)
+		ap, _ := wp["ActiveAccessPoint"].Value().(dbus.ObjectPath)
 
 		var isScanning bool
 		if scanningVar, ok := wp["Scanning"]; ok {
@@ -88,7 +112,7 @@ func GetDevicesData(c *dbus.Conn) []common.Device {
 		}
 
 		bssid, frequency, security := "-", 0, "-"
-		if ap != "/" {
+		if ap != "/" && ap != "" { // Check for empty path too
 			apObj := c.Object(NMDest, ap)
 			if bssidVar, err := apObj.GetProperty("org.freedesktop.NetworkManager.AccessPoint.HwAddress"); err == nil {
 				bssid = bssidVar.Value().(string)
@@ -122,15 +146,25 @@ func GetDevicesData(c *dbus.Conn) []common.Device {
 			modeStr = fmt.Sprintf("%d", mode)
 		}
 
+		// Safe check for global WirelessEnabled properties
+		powered := false
+		if wEnabled := p["WirelessEnabled"].Value(); wEnabled != nil {
+			if whEnabled := p["WirelessHardwareEnabled"].Value(); whEnabled != nil {
+				powered = wEnabled.(bool) && whEnabled.(bool)
+			}
+		}
+
 		devicesList = append(devicesList, common.Device{
-			Path: d,
-			Name: iface, Mode: modeStr,
-			Powered:      p["WirelessEnabled"].Value().(bool) && p["WirelessHardwareEnabled"].Value().(bool),
+			Path:         d,
+			Name:         iface,
+			Mode:         modeStr,
+			Powered:      powered,
 			Address:      mac,
-			State:        deviceState, // **FIX:** Use the accurate per-device state.
+			State:        deviceState,
 			CurrentBSSID: bssid,
 			Scanning:     isScanning,
-			Frequency:    frequency, Security: security,
+			Frequency:    frequency,
+			Security:     security,
 		})
 	}
 	return devicesList

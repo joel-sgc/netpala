@@ -21,11 +21,27 @@ func GetKnownNetworks(conn *dbus.Conn) []common.KnownNetwork {
 	aps := map[string]common.KnownNetwork{}
 	var devs []dbus.ObjectPath
 	_ = nm.Call(NMDest+".GetDevices", 0).Store(&devs)
+
+	// Loop 1: Gather AP data (Signal, BSSID)
 	for _, d := range devs {
 		obj := conn.Object(NMDest, d)
-		if t, _ := obj.GetProperty("org.freedesktop.NetworkManager.Device.DeviceType"); t.Value().(uint32) != 2 {
+
+		// --- FIX 1 START ---
+		// Safely check DeviceType. If err != nil or value is nil, skip.
+		t, err := obj.GetProperty("org.freedesktop.NetworkManager.Device.DeviceType")
+		if err != nil {
 			continue
 		}
+		val := t.Value()
+		if val == nil {
+			continue
+		}
+		// 2 = WiFi. If not uint32 or not 2, skip.
+		if dType, ok := val.(uint32); !ok || dType != 2 {
+			continue
+		}
+		// --- FIX 1 END ---
+
 		if apsVar, err := obj.GetProperty("org.freedesktop.NetworkManager.Device.Wireless.AccessPoints"); err == nil {
 			if paths, ok := apsVar.Value().([]dbus.ObjectPath); ok {
 				for _, ap := range paths {
@@ -51,11 +67,25 @@ func GetKnownNetworks(conn *dbus.Conn) []common.KnownNetwork {
 		}
 	}
 
+	// Loop 2: Check for Active Connection
 	for _, d := range devs {
 		obj := conn.Object(NMDest, d)
-		if t, _ := obj.GetProperty("org.freedesktop.NetworkManager.Device.DeviceType"); t.Value().(uint32) != 2 {
+
+		// --- FIX 2 START ---
+		// Repeat safe check here. The device list is the same, but state might have changed.
+		t, err := obj.GetProperty("org.freedesktop.NetworkManager.Device.DeviceType")
+		if err != nil {
 			continue
 		}
+		val := t.Value()
+		if val == nil {
+			continue
+		}
+		if dType, ok := val.(uint32); !ok || dType != 2 {
+			continue
+		}
+		// --- FIX 2 END ---
+
 		if apVar, err := obj.GetProperty("org.freedesktop.NetworkManager.Device.Wireless.ActiveAccessPoint"); err == nil {
 			if apPath, ok := apVar.Value().(dbus.ObjectPath); ok && apPath != "/" {
 				apObj := conn.Object(NMDest, apPath)
@@ -101,29 +131,29 @@ func GetKnownNetworks(conn *dbus.Conn) []common.KnownNetwork {
 			}
 		}
 		sec := "open" // Default for no security section
-    if wsec, ok := s["802-11-wireless-security"]; ok {
-      if km, ok := wsec["key-mgmt"]; ok {
-        kmStr := strings.ToLower(km.Value().(string))
-        switch {
-        case strings.Contains(kmStr, "sae"):
-          sec = "wpa3-sae"
-        case strings.Contains(kmStr, "owe"):
-          sec = "owe"
-        case strings.Contains(kmStr, "wpa-psk"):
-          sec = "wpa2-psk"
-        case strings.Contains(kmStr, "wpa-eap"):
-          sec = "wpa2-eap"
-        case strings.Contains(kmStr, "none"):
-          sec = "wep"
-        default:
-          sec = "encrypted"
-        }
-      } else {
+		if wsec, ok := s["802-11-wireless-security"]; ok {
+			if km, ok := wsec["key-mgmt"]; ok {
+				kmStr := strings.ToLower(km.Value().(string))
+				switch {
+				case strings.Contains(kmStr, "sae"):
+					sec = "wpa3-sae"
+				case strings.Contains(kmStr, "owe"):
+					sec = "owe"
+				case strings.Contains(kmStr, "wpa-psk"):
+					sec = "wpa2-psk"
+				case strings.Contains(kmStr, "wpa-eap"):
+					sec = "wpa2-eap"
+				case strings.Contains(kmStr, "none"):
+					sec = "wep"
+				default:
+					sec = "encrypted"
+				}
+			} else {
 				// Security section exists but has no key-mgmt.
 				// Could be WEP or other.
 				sec = "encrypted"
-      }
-    }
+			}
+		}
 		apInfo := aps[ss]
 		known = append(known, common.KnownNetwork{
 

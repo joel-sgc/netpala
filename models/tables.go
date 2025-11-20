@@ -10,10 +10,12 @@ import (
 // TablesModel is a container model that holds all the main tables.
 type TablesModel struct {
 	// We'll populate these fields from the main model just before rendering.
-	SelectedBox     int
-	SelectedEntry   int
-	KnownHeight     int
-	ScannedHeight   int
+	SelectedBox   int
+	SelectedEntry int
+	KnownHeight   int
+	ScannedHeight int
+	VPNHeight     int
+	DeviceHeight  int
 
 	DeviceData      []common.Device
 	VpnData         []common.VpnConnection
@@ -32,11 +34,10 @@ func (m TablesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders all tables in order.
 func (m TablesModel) View() string {
-	deviceTable := TableModel("Device", m.SelectedBox == 0, m.SelectedEntry, 5, m.DeviceData, nil, nil, nil, nil)
-	stationTable := TableModel("Station", m.SelectedBox == 1, m.SelectedEntry, 5, nil, m.DeviceData, nil, nil, nil)
-	vpnTableModel := TableModel("Virtual Private Networks", m.SelectedBox == 2, m.SelectedEntry, 5, nil, nil, m.VpnData, nil, nil)
-	knownNetsTable := TableModel("Known Networks", m.SelectedBox == 3, m.SelectedEntry, m.KnownHeight, nil, nil, nil, m.KnownNetworks, nil)
-	scannedNetsTable := TableModel("New Networks", m.SelectedBox == 4, m.SelectedEntry, m.ScannedHeight, nil, nil, nil, nil, m.ScannedNetworks)
+	knownNetsTable := TableModel("Known Networks", m.SelectedBox == 0, m.SelectedEntry, m.KnownHeight, m.KnownNetworks, nil, nil, nil)
+	scannedNetsTable := TableModel("New Networks", m.SelectedBox == 1, m.SelectedEntry, m.ScannedHeight, nil, m.ScannedNetworks, nil, nil)
+	vpnTableModel := TableModel("Virtual Private Networks", m.SelectedBox == 2, m.SelectedEntry, m.VPNHeight, nil, nil, m.VpnData, nil)
+	deviceTable := TableModel("Device", m.SelectedBox == 3, m.SelectedEntry, m.DeviceHeight, nil, nil, nil, m.DeviceData)
 
 	vpnView := vpnTableModel.View()
 	if len(m.VpnData) == 0 {
@@ -44,10 +45,9 @@ func (m TablesModel) View() string {
 	}
 
 	return strings.Join([]string{
-		deviceTable.View(),
-		stationTable.View(),
-		vpnView,
 		knownNetsTable.View(),
 		scannedNetsTable.View(),
+		vpnView,
+		deviceTable.View(),
 	}, "")
 }

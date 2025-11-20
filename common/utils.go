@@ -147,7 +147,7 @@ func BoxStyle(selectedRow int, selectedBox bool, height int) func(row, col int) 
 
 func FormatDeviceData(devices []Device) [][]string {
 	data := [][]string{
-		padHeaders([]string{"Name", "Mode", "Powered", "Status"}, []int{-1, -1, -1, -1}), {""},
+		padHeaders([]string{"Name", "Mode", "Powered", "State", "Scanning", "Frequency", "Security"}, []int{-1, -1, -1, -1, -1, -1, -1}), {""},
 	}
 	for _, d := range devices {
 		powered := "Off"
@@ -155,7 +155,17 @@ func FormatDeviceData(devices []Device) [][]string {
 			powered = "On"
 		}
 
-		row := []string{d.Name, d.Mode, powered, d.Address}
+		var state string
+		switch d.State {
+		case -1:
+			state = "disconnected"
+		case 0:
+			state = "connecting"
+		case 1:
+			state = "connected"
+		}
+
+		row := []string{d.Name, d.Mode, powered, state, strconv.FormatBool(d.Scanning), freqToBand(d.Frequency), d.Security}
 		for i := range row {
 			if lipgloss.Width(row[i]) > lipgloss.Width(data[0][i]) {
 				row[i] = row[i][:max(0, lipgloss.Width(data[0][i])-3)] + "..."

@@ -41,6 +41,9 @@ type SubmitEapFormMsg struct {
 type SubmitConfirmationMsg struct {
 	Value bool
 }
+type SubmitPasswordMsg struct {
+	Value string
+}
 
 type Device struct {
 	Path         dbus.ObjectPath

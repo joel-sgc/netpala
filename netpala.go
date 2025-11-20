@@ -27,12 +27,12 @@ type NetpalaData struct {
 	Tables    models.TablesModel
 	StatusBar models.StatusBarData
 
-	Form         models.WpaEapForm
 	Overlay      overlay.Model
+	Form         models.WpaEapForm
 	Confirmation models.Confirmation
+	PasswordForm models.PasswordInput
 
 	SelectedNetwork common.ScannedNetwork
-	IsTyping        bool
 	PopupState      int // -1: no popup, 0: form, 1: confirm
 
 	Alert               bubbleup.AlertModel
@@ -137,7 +137,8 @@ func NetpalaModel() NetpalaData {
 		Tables:    models.TablesModel{},
 		StatusBar: models.ModelStatusBar(),
 
-		Form: models.ModelWpaEapForm(),
+		PasswordForm: models.ModelPasswordInput(),
+		Form:         models.ModelWpaEapForm(),
 		Overlay: overlay.Model{
 			XPosition: overlay.Left,
 			YPosition: overlay.Center,
@@ -145,7 +146,6 @@ func NetpalaModel() NetpalaData {
 			YOffset:   0,
 		},
 
-		IsTyping:            false,
 		PopupState:          -1,
 		InitialLoadComplete: false,
 	}
@@ -231,52 +231,40 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Return the confirmation model and any command it produced
 			return m, cmd
 		}
-	}
-
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "esc":
-			m.IsTyping = false
-			m.StatusBar.Input.Placeholder = ""
-			m.StatusBar.Input.Blur()
-			m.StatusBar.Input.SetValue("")
-			return m, tea.Quit
-		}
-	}
-
-	if m.IsTyping {
+	case 2:
+		// Handle the password popup state
 		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			switch msg.String() {
-			case "ctrl+c", "esc":
-				m.IsTyping = false
-				m.StatusBar.Input.Placeholder = ""
-				m.StatusBar.Input.Blur()
-				m.StatusBar.Input.SetValue("")
-				return m, nil
+		case common.ExitFormMsg:
+			m.PopupState = -1
+			m.Form = models.ModelWpaEapForm()
 
-			case "enter":
-				password := m.StatusBar.Input.Value()
-				m.IsTyping = false
-				m.StatusBar.Input.Placeholder = ""
-				m.StatusBar.Input.Blur()
-				m.StatusBar.Input.SetValue("")
+			var formCmd tea.Cmd
+			var newForm tea.Model
+			newForm, formCmd = m.Form.Update(tea.WindowSizeMsg{Width: m.Width, Height: m.Height})
+			m.Form = newForm.(models.WpaEapForm)
+			return m, formCmd
+		case common.SubmitPasswordMsg:
+			m.PopupState = -1                            // Exit popup
+			m.PasswordForm = models.ModelPasswordInput() // Reset
 
-				if len(m.DeviceData) == 0 {
-					return m, func() tea.Msg {
-						return common.ErrMsg{Err: fmt.Errorf("no wifi device found")}
-					}
+			if len(m.DeviceData) == 0 {
+				return m, func() tea.Msg {
+					return common.ErrMsg{Err: fmt.Errorf("no wifi device found")}
 				}
-				wifiDevice := m.DeviceData[0]
-
-				// Use the stored network to Connect, not the current selection
-				return m, dbus.AddAndConnectToNetworkCmd(m.Conn, m.SelectedNetwork, password, wifiDevice.Path)
 			}
-		}
 
-		m.StatusBar.Input, cmd = m.StatusBar.Input.Update(msg)
-		return m, cmd
+			wifiDevice := m.DeviceData[0]
+			// Use the stored network to Connect, not the current selection
+			return m, dbus.AddAndConnectToNetworkCmd(m.Conn, m.SelectedNetwork, msg.Value, wifiDevice.Path)
+
+		default: // If it's not a SubmitConfirmationMsg...
+			// Forward the *original* message down to the confirmation model
+			var newPasswordInput tea.Model
+			newPasswordInput, cmd = m.PasswordForm.Update(msg)
+			m.PasswordForm = newPasswordInput.(models.PasswordInput)
+			// Return the confirmation model and any command it produced
+			return m, cmd
+		}
 	}
 
 	switch msg := msg.(type) {
@@ -326,6 +314,8 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, alertCmd
 
 	case tea.WindowSizeMsg:
+		var cmds []tea.Cmd
+
 		m.Width = msg.Width
 		m.Height = msg.Height
 
@@ -333,7 +323,15 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var newForm tea.Model
 		newForm, formCmd = m.Form.Update(msg)
 		m.Form = newForm.(models.WpaEapForm)
-		return m, formCmd
+		cmds = append(cmds, formCmd)
+
+		var statusCmd tea.Cmd
+		var newStatus tea.Model
+		newStatus, statusCmd = m.StatusBar.Update(msg)
+		m.StatusBar = newStatus.(models.StatusBarData)
+		cmds = append(cmds, statusCmd)
+
+		return m, tea.Batch(cmds...)
 
 	case common.PeriodicRefreshMsg:
 		return m, dbus.RefreshAllData(m.Conn)
@@ -345,7 +343,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Conn.Close()
 			return m, tea.Quit
 
-		case "r":
+		case "s":
 			var cmds []tea.Cmd
 			cmds = append(cmds, dbus.RequestScan(m.Conn))
 			cmds = append(cmds, func() tea.Msg {
@@ -354,46 +352,47 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m, tea.Batch(cmds...)
 		case "up", "k":
-			if m.SelectedEntry > 0 && !m.IsTyping {
+			if m.SelectedEntry > 0 {
 				m.SelectedEntry--
 			}
+
 		case "down", "j":
-			boxes := []int{len(m.DeviceData), len(m.DeviceData), len(m.VpnData), len(m.KnownNetworks), len(m.ScannedNetworks)}
-			if m.selectedBox < len(boxes) && m.SelectedEntry < boxes[m.selectedBox]-1 && !m.IsTyping {
+			boxes := []int{len(m.KnownNetworks), len(m.ScannedNetworks)}
+			if len(m.VpnData) > 0 {
+				boxes = append(boxes, len(m.VpnData))
+			}
+			boxes = append(boxes, len(m.DeviceData))
+
+			if m.selectedBox < len(boxes) && m.SelectedEntry < boxes[m.selectedBox]-1 {
 				m.SelectedEntry++
 			}
+
 		case "shift+tab":
-			if m.selectedBox > 0 {
-				m.selectedBox--
-				m.SelectedEntry = 0
-			}
+			boxAmount := 4
+			m.selectedBox = (m.selectedBox - 1 + boxAmount) % boxAmount
+			m.SelectedEntry = 0
 
 			if len(m.VpnData) == 0 && m.selectedBox == 2 {
-				m.selectedBox--
+				m.selectedBox = 1
 			}
+
 		case "tab":
-			if m.selectedBox < 4 {
-				m.selectedBox++
-				m.SelectedEntry = 0
-			}
+			boxAmount := 4
+
+			m.selectedBox = (m.selectedBox + 1) % boxAmount
+			m.SelectedEntry = 0
 
 			if len(m.VpnData) == 0 && m.selectedBox == 2 {
-				m.selectedBox++
+				m.selectedBox = 3
 			}
+
 		case "enter", " ":
-			if m.selectedBox == 0 && len(m.DeviceData) > 0 {
-				// Enable/Disable Wifi Card
-				return m, dbus.ToggleWifiCmd(m.Conn, !m.DeviceData[0].Powered)
-			} else if m.selectedBox == 2 && len(m.VpnData) > 0 && len(m.DeviceData) > 0 {
-				// Toggle VPN
-				selectedVpn := m.VpnData[m.SelectedEntry]
-				return m, dbus.ToggleVpnCmd(m.Conn, selectedVpn.Path, selectedVpn.ActivePath, !selectedVpn.Connected)
-			} else if m.selectedBox == 3 && len(m.KnownNetworks) > 0 && len(m.DeviceData) > 0 {
+			if m.selectedBox == 0 && len(m.KnownNetworks) > 0 && len(m.DeviceData) > 0 {
 				// Connect to known network
 				selectedNetwork := m.KnownNetworks[m.SelectedEntry]
 				wifiDevice := m.DeviceData[0]
 				return m, dbus.ConnectToNetworkCmd(m.Conn, selectedNetwork.Path, wifiDevice.Path)
-			} else if m.selectedBox == 4 && len(m.ScannedNetworks) > 0 && len(m.DeviceData) > 0 {
+			} else if m.selectedBox == 1 && len(m.ScannedNetworks) > 0 && len(m.DeviceData) > 0 {
 				// Store the selected network before entering typing mode
 				m.SelectedNetwork = m.ScannedNetworks[m.SelectedEntry]
 
@@ -414,14 +413,22 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, dbus.AddAndConnectToNetworkCmd(m.Conn, m.SelectedNetwork, "", wifiDevice.Path)
 				default:
 					// Most common case: prompt for password
-					m.IsTyping = true
-					m.StatusBar.Input.Placeholder = "Enter Wi-Fi Password..."
-					m.StatusBar.Input.Focus()
+					m.PopupState = 2
+					m.PasswordForm.Password.Focus()
+
+					m.Overlay = updateOverlayModel(m, &m.PasswordForm)
+					return m, nil
 				}
-				return m, nil
+			} else if m.selectedBox == 2 && len(m.VpnData) > 0 && len(m.DeviceData) > 0 {
+				// Toggle VPN
+				selectedVpn := m.VpnData[m.SelectedEntry]
+				return m, dbus.ToggleVpnCmd(m.Conn, selectedVpn.Path, selectedVpn.ActivePath, !selectedVpn.Connected)
+			} else if m.selectedBox == 3 && len(m.DeviceData) > 0 {
+				// Enable/Disable Wifi Card
+				return m, dbus.ToggleWifiCmd(m.Conn, !m.DeviceData[0].Powered)
 			}
-		case "delete":
-			if !m.IsTyping && m.selectedBox == 3 && len(m.KnownNetworks) > 0 {
+		case "delete", "backspace":
+			if m.selectedBox == 0 && len(m.KnownNetworks) > 0 {
 				// Delete known network
 				m.SelectedNetwork = common.ScannedNetwork{
 					Path:     m.KnownNetworks[m.SelectedEntry].Path,
@@ -446,7 +453,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m NetpalaData) View() string {
-	netsHeight := common.WindowDimensions().Height - 18
+	netsHeight := common.WindowDimensions().Height - 14
 	if len(m.VpnData) > 0 {
 		netsHeight -= 5
 	}
@@ -455,6 +462,9 @@ func (m NetpalaData) View() string {
 	m.Tables.SelectedEntry = m.SelectedEntry
 	m.Tables.KnownHeight = netsHeight / 2
 	m.Tables.ScannedHeight = netsHeight - (netsHeight / 2)
+	m.Tables.VPNHeight = 5
+	m.Tables.DeviceHeight = 5
+
 	m.Tables.DeviceData = m.DeviceData
 	m.Tables.VpnData = m.VpnData
 	m.Tables.KnownNetworks = m.KnownNetworks
@@ -467,17 +477,16 @@ func (m NetpalaData) View() string {
 	case 1:
 		m.Overlay = updateOverlayModel(m, &m.Confirmation)
 		return m.Alert.Render(m.Overlay.View() + m.StatusBar.View())
+	case 2:
+		m.Overlay = updateOverlayModel(m, &m.PasswordForm)
+		return m.Alert.Render(m.Overlay.View() + m.StatusBar.View())
 	default:
 		return m.Alert.Render(m.Tables.View() + m.StatusBar.View())
 	}
 }
 
 func main() {
-	p := tea.NewProgram(NetpalaModel(), tea.WithAltScreen())
-	if _, err := p.Run(); err != nil {
-		// os.Exit(1)
-		// tea.NewProgram(models.ModelError(err), tea.WithAltScreen()).Run()
-	}
+	tea.NewProgram(NetpalaModel(), tea.WithAltScreen()).Run()
 }
 
 func updateOverlayModel(m NetpalaData, popup tea.Model) overlay.Model {

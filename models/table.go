@@ -5,7 +5,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss/table"
-	"go.dalton.dog/bubbleup"
 )
 
 type TableData struct {
@@ -13,9 +12,7 @@ type TableData struct {
 	isTableSelected bool
 	selectedRow     int
 	height          int
-	alert						bubbleup.AlertModel
-	err							error
-	
+
 	deviceData      []common.Device
 	stationData     []common.Device
 	vpnData         []common.VpnConnection
@@ -28,23 +25,22 @@ func TableModel(
 	isTableSelected bool,
 	selectedRow int,
 	height int,
-	devData []common.Device,
-	stationData []common.Device,
-	vpnData []common.VpnConnection,
+
 	knownNets []common.KnownNetwork,
 	scannedNets []common.ScannedNetwork,
+	vpnData []common.VpnConnection,
+	devData []common.Device,
 ) TableData {
 	return TableData{
-		title:           	title,
-		isTableSelected: 	isTableSelected,
-		selectedRow:     	selectedRow,
-		height:          	height,
+		title:           title,
+		isTableSelected: isTableSelected,
+		selectedRow:     selectedRow,
+		height:          height,
 
-		deviceData:      	devData,
-		stationData:     	stationData,
-		vpnData:         	vpnData,
-		knownNetworks:   	knownNets,
-		scannedNetworks: 	scannedNets,
+		deviceData:      devData,
+		vpnData:         vpnData,
+		knownNetworks:   knownNets,
+		scannedNetworks: scannedNets,
 	}
 }
 

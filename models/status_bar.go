@@ -1,68 +1,82 @@
 package models
 
 import (
+	"fmt"
 	"netpala/common"
-	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type keyMap struct {
+	Up     key.Binding
+	Down   key.Binding
+	Toggle key.Binding
+	Remove key.Binding
 	Scan   key.Binding
-	Select key.Binding
+	Nav    key.Binding
 	Quit   key.Binding
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Scan, k.Select, k.Quit}
+	return []key.Binding{
+		k.Up, k.Down, k.Toggle, k.Remove,
+		k.Scan, k.Nav, k.Quit,
+	}
 }
 
-// FullHelp returns keybindings for the expanded help view. It's part of the
-// key.Map interface.
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Scan, k.Select, k.Quit}, // first column
+		{k.Up, k.Down, k.Toggle, k.Remove, k.Scan, k.Nav, k.Quit},
 	}
 }
 
 var keys = keyMap{
-	Scan: key.NewBinding(
-		key.WithKeys("r"),
-		key.WithHelp("r:", "scan networks"),
+	Nav: key.NewBinding(
+		key.WithKeys("shift+tab/tab"),
+		key.WithHelp("⇄", "Nav"),
 	),
-	Select: key.NewBinding(
-		key.WithKeys("enter", "space"),
-		key.WithHelp("↵/space:", "select row"),
+	Up: key.NewBinding(
+		key.WithKeys("k", "up"),
+		key.WithHelp("k/↑", "Up"),
+	),
+	Down: key.NewBinding(
+		key.WithKeys("j", "down"),
+		key.WithHelp("j/↓", "Down"),
+	),
+	Toggle: key.NewBinding(
+		key.WithKeys("enter", "ctrl+d"),
+		key.WithHelp("␣/⤶", "Dis/Connect"),
+	),
+	Scan: key.NewBinding(
+		key.WithKeys("s"),
+		key.WithHelp("s", "Scan"),
+	),
+	Remove: key.NewBinding(
+		key.WithKeys("⌫"),
+		key.WithHelp("⌫", "Remove"),
 	),
 	Quit: key.NewBinding(
-		key.WithKeys("q", "esc", "ctrl+c"),
-		key.WithHelp("ctrl+q/esc:", "quit"),
+		key.WithKeys("q", "ctrl+c"),
+		key.WithHelp("q/ctrl+c", "Quit"),
 	),
 }
 
 type StatusBarData struct {
-	Input textinput.Model
-	Err   error
+	Err error
 }
 
 func ModelStatusBar() StatusBarData {
-	ti := textinput.New()
-	ti.CharLimit = 156
-	ti.Width = 32
-
 	return StatusBarData{
-		Input: ti,
-		Err:   nil,
+		Err: nil,
 	}
 }
 
 func (m StatusBarData) Init() tea.Cmd {
-	return textinput.Blink
+	return nil
 }
 
 func (m StatusBarData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -80,7 +94,6 @@ func (m StatusBarData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.Input, cmd = m.Input.Update(msg)
 	return m, cmd
 }
 
@@ -92,22 +105,28 @@ func (m StatusBarData) View() string {
 	keyHelp.Styles.ShortDesc = style
 	keyHelp.Styles.ShortKey = style
 
-	inputLen := len(m.Input.View()) - 12
-	if m.Input.Focused() {
-		if len(m.Input.Value()) == 0 {
-			inputLen = len(m.Input.Placeholder)
-		} else {
-			inputLen = 23
-		}
-	}
+	return renderShortHelp("|", style, style)
+}
 
-	keyIndex := keyHelp.View(keys)
-
-	ansi := regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
-	clean := ansi.ReplaceAllString(keyIndex, "")
+func renderShortHelp(sep string, keyStyle lipgloss.Style, descStyle lipgloss.Style) string {
+	keybinds := keys.ShortHelp()
+	helpObj := help.New()
+	helpObj.ShortSeparator = ""
+	allKeybindsWidth := lipgloss.Width(helpObj.ShortHelpView(keys.ShortHelp()))
 
 	totalWidth := common.WindowDimensions().Width
-	remainingWidth := totalWidth - (inputLen + len(clean)) - 6 // extra 6 to account for automatic padding
+	totalPaddingWidth := max(totalWidth-allKeybindsWidth, 0)
+	columnWidth := totalPaddingWidth / (len(keybinds) * 3)
 
-	return m.Input.View() + strings.Repeat(" ", max(remainingWidth, 0)) + keyIndex
+	finalStr := make([]string, len(keys.ShortHelp()))
+
+	for i, key := range keybinds {
+		finalStr[i] += strings.Repeat(" ", columnWidth)
+		bind := keyStyle.Render(key.Help().Key)
+		desc := descStyle.Bold(true).Render(key.Help().Desc)
+		finalStr[i] += fmt.Sprintf("%s %s", bind, desc)
+		finalStr[i] += strings.Repeat(" ", columnWidth)
+	}
+
+	return lipgloss.NewStyle().Width(totalWidth).Align(lipgloss.Center).Render(strings.Join(finalStr, sep))
 }

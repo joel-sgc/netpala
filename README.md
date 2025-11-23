@@ -69,7 +69,12 @@ You'll need:
 
 ```bash
 #!/bin/bash
-exec setsid uwsm-app -- xdg-terminal-exec --app-id=com.omarchy.Impala -e netpala \"$@\"
+$TERMINAL --title=com.omarchy.netpala netpala
+```
+
+## Hyprland floating window rules
+```bash
+windowrule = tag +floating-window, title:(com.omarchy.netpala)
 ```
 
 ---

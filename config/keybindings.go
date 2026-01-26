@@ -43,6 +43,7 @@ type Colors struct {
 	Inactive      string `toml:"inactive"`        // Inactive/dimmed elements
 	Error         string `toml:"error"`           // Error states
 	ErrorText     string `toml:"error_text"`     // Error text
+	HelpText      string `toml:"help_text"`      // Help text at bottom of window
 }
 
 // Config holds the entire application configuration
@@ -103,6 +104,7 @@ func DefaultColors() Colors {
 		Inactive:   "#444a66",  // Dark gray
 		Error:      "#ff0000",  // Red
 		ErrorText:  "#aa0000",  // Dark red
+		HelpText:   "#a7abca",  // Help text at bottom (same as Primary by default)
 	}
 }
 

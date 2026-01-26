@@ -84,3 +84,6 @@ error = "#ff0000"          # Red
 
 # Error text
 error_text = "#aa0000"     # Dark red
+
+# Helper text at the bottom of the window
+help_text = "#a7abca"      # Light blue-gray

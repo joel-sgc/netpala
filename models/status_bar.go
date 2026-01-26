@@ -50,7 +50,7 @@ func (m StatusBarData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // I don't understand why these numbers work, I just know that they do. Periodt.
 func (m StatusBarData) View() string {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color(m.Colors.Primary))
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color(m.Colors.HelpText))
 
 	keyHelp := help.New()
 	keyHelp.Styles.ShortDesc = style

@@ -2,6 +2,7 @@ package models
 
 import (
 	"netpala/common"
+	"netpala/config"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,9 +13,10 @@ type PasswordInput struct {
 	Message      string
 	Password     textinput.Model
 	ConfirmValue bool
+	Colors       config.Colors
 }
 
-func ModelPasswordInput() PasswordInput {
+func ModelPasswordInput(colors config.Colors) PasswordInput {
 	Input := textinput.New()
 	Input.Placeholder = "Enter Password..."
 	Input.Prompt = ""
@@ -24,6 +26,7 @@ func ModelPasswordInput() PasswordInput {
 	return PasswordInput{
 		Password:     Input,
 		ConfirmValue: false,
+		Colors:       colors,
 	}
 }
 
@@ -61,22 +64,22 @@ func (m PasswordInput) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m PasswordInput) View() string {
 	containerStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#9cca69")).
-		Foreground(lipgloss.Color("#a7abca")).
+		BorderForeground(lipgloss.Color(m.Colors.Active)).
+		Foreground(lipgloss.Color(m.Colors.Primary)).
 		Align(lipgloss.Center).
 		Padding(0, 1).
 		Width(50)
 
 	inactiveBorderStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#444a66")).
+		BorderForeground(lipgloss.Color(m.Colors.Inactive)).
 		Align(lipgloss.Center).
 		Padding(0, 3).
 		Width(18)
 
 	activeBorderStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#cda162")).
+		BorderForeground(lipgloss.Color(m.Colors.ActiveText)).
 		Align(lipgloss.Center).
 		Padding(0, 3).
 		Width(18)
@@ -92,7 +95,7 @@ func (m PasswordInput) View() string {
 	return containerStyle.Render(
 		lipgloss.JoinVertical(lipgloss.Left,
 			m.Message,
-			activeBorderStyle.Width(38).BorderForeground(lipgloss.Color("#9cca69")).Render(m.Password.View()),
+			activeBorderStyle.Width(38).BorderForeground(lipgloss.Color(m.Colors.Active)).Render(m.Password.View()),
 			lipgloss.JoinHorizontal(lipgloss.Center,
 				cancelButton, confirmButton,
 			),

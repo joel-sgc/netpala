@@ -15,12 +15,14 @@ import (
 type StatusBarData struct {
 	Err    error
 	KeyMap config.AppKeyMap
+	Colors config.Colors
 }
 
-func ModelStatusBar(keyMap config.AppKeyMap) StatusBarData {
+func ModelStatusBar(keyMap config.AppKeyMap, colors config.Colors) StatusBarData {
 	return StatusBarData{
 		Err:    nil,
 		KeyMap: keyMap,
+		Colors: colors,
 	}
 }
 
@@ -48,7 +50,7 @@ func (m StatusBarData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // I don't understand why these numbers work, I just know that they do. Periodt.
 func (m StatusBarData) View() string {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#a7abca"))
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color(m.Colors.Primary))
 
 	keyHelp := help.New()
 	keyHelp.Styles.ShortDesc = style

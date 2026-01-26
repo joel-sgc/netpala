@@ -2,6 +2,7 @@ package models
 
 import (
 	"netpala/common"
+	"netpala/config"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss/table"
@@ -18,6 +19,8 @@ type TableData struct {
 	vpnData         []common.VpnConnection
 	knownNetworks   []common.KnownNetwork
 	scannedNetworks []common.ScannedNetwork
+	
+	colors          config.Colors
 }
 
 func TableModel(
@@ -30,6 +33,8 @@ func TableModel(
 	scannedNets []common.ScannedNetwork,
 	vpnData []common.VpnConnection,
 	devData []common.Device,
+	
+	colors config.Colors,
 ) TableData {
 	return TableData{
 		title:           title,
@@ -41,6 +46,8 @@ func TableModel(
 		vpnData:         vpnData,
 		knownNetworks:   knownNets,
 		scannedNetworks: scannedNets,
+		
+		colors:          colors,
 	}
 }
 
@@ -53,9 +60,9 @@ func (m TableData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m TableData) View() string {
-	borderStyle := common.InactiveBorderStyle
+	borderStyle := common.InactiveBorderStyle(m.colors.Primary)
 	if m.isTableSelected {
-		borderStyle = common.ActiveBorderStyle
+		borderStyle = common.ActiveBorderStyle(m.colors.Active)
 	}
 
 	var tableData [][]string
@@ -75,8 +82,8 @@ func (m TableData) View() string {
 		Border(common.BoxBorder).
 		BorderColumn(false).
 		BorderStyle(borderStyle).
-		StyleFunc(common.BoxStyle(m.selectedRow, m.isTableSelected, m.height)).
+		StyleFunc(common.BoxStyle(m.selectedRow, m.isTableSelected, m.height, m.colors.Primary, m.colors.ActiveText, m.colors.Inactive, m.colors.SelectionBg)).
 		Rows(tableData...)
 
-	return (common.CalcTitle(m.title, m.isTableSelected) + table.Render()) + "\n"
+	return (common.CalcTitle(m.title, m.isTableSelected, m.colors.Primary, m.colors.Active) + table.Render()) + "\n"
 }

@@ -33,9 +33,22 @@ type KeyBindings struct {
 	Cancel KeyBinding `toml:"cancel"`
 }
 
+// Colors holds all color configurations for the application
+type Colors struct {
+	// Primary colors
+	Primary       string `toml:"primary"`         // Default text and UI elements
+	Active        string `toml:"active"`          // Active/selected borders
+	ActiveText    string `toml:"active_text"`    // Active/selected text
+	SelectionBg   string `toml:"selection_bg"`    // Selection bar background
+	Inactive      string `toml:"inactive"`        // Inactive/dimmed elements
+	Error         string `toml:"error"`           // Error states
+	ErrorText     string `toml:"error_text"`     // Error text
+}
+
 // Config holds the entire application configuration
 type Config struct {
 	KeyBindings KeyBindings `toml:"keybindings"`
+	Colors      Colors      `toml:"colors"`
 }
 
 // DefaultKeyBindings returns the default keybinding configuration
@@ -80,10 +93,24 @@ func DefaultKeyBindings() KeyBindings {
 	}
 }
 
+// DefaultColors returns the default color configuration
+func DefaultColors() Colors {
+	return Colors{
+		Primary:    "#a7abca",  // Light blue-gray
+		Active:     "#9cca69",  // Green
+		ActiveText: "#cda162",  // Orange
+		SelectionBg: "#5a6988", // Darker blue-gray for better contrast
+		Inactive:   "#444a66",  // Dark gray
+		Error:      "#ff0000",  // Red
+		ErrorText:  "#aa0000",  // Dark red
+	}
+}
+
 // DefaultConfig returns a new Config with default values
 func DefaultConfig() Config {
 	return Config{
 		KeyBindings: DefaultKeyBindings(),
+		Colors:      DefaultColors(),
 	}
 }
 
@@ -177,6 +204,7 @@ func Save(cfg *Config) error {
 // mergeWithDefaults ensures all keybindings have values, using defaults for missing ones
 func mergeWithDefaults(cfg Config) Config {
 	defaults := DefaultKeyBindings()
+	defaultColors := DefaultColors()
 
 	if len(cfg.KeyBindings.Up.Keys) == 0 {
 		cfg.KeyBindings.Up = defaults.Up
@@ -233,6 +261,29 @@ func mergeWithDefaults(cfg Config) Config {
 	}
 	if cfg.KeyBindings.Cancel.Help == "" {
 		cfg.KeyBindings.Cancel.Help = defaults.Cancel.Help
+	}
+
+	// Merge colors with defaults
+	if cfg.Colors.Primary == "" {
+		cfg.Colors.Primary = defaultColors.Primary
+	}
+	if cfg.Colors.Active == "" {
+		cfg.Colors.Active = defaultColors.Active
+	}
+	if cfg.Colors.ActiveText == "" {
+		cfg.Colors.ActiveText = defaultColors.ActiveText
+	}
+	if cfg.Colors.SelectionBg == "" {
+		cfg.Colors.SelectionBg = defaultColors.SelectionBg
+	}
+	if cfg.Colors.Inactive == "" {
+		cfg.Colors.Inactive = defaultColors.Inactive
+	}
+	if cfg.Colors.Error == "" {
+		cfg.Colors.Error = defaultColors.Error
+	}
+	if cfg.Colors.ErrorText == "" {
+		cfg.Colors.ErrorText = defaultColors.ErrorText
 	}
 
 	return cfg

@@ -45,6 +45,7 @@ type NetpalaData struct {
 	// Configuration
 	Config *config.Config
 	KeyMap config.AppKeyMap
+	Colors config.Colors
 }
 
 // The initial command to load all data at startup.
@@ -144,10 +145,10 @@ func NetpalaModel() NetpalaData {
 		ScannedNetworks: []common.ScannedNetwork{},
 
 		Tables:    models.TablesModel{},
-		StatusBar: models.ModelStatusBar(keyMap),
+		StatusBar: models.ModelStatusBar(keyMap, cfg.Colors),
 
-		PasswordForm: models.ModelPasswordInput(),
-		Form:         models.ModelWpaEapForm(),
+		PasswordForm: models.ModelPasswordInput(cfg.Colors),
+		Form:         models.ModelWpaEapForm(cfg.Colors),
 		Overlay: overlay.Model{
 			XPosition: overlay.Left,
 			YPosition: overlay.Center,
@@ -160,6 +161,7 @@ func NetpalaModel() NetpalaData {
 
 		Config: cfg,
 		KeyMap: keyMap,
+		Colors: cfg.Colors,
 	}
 }
 
@@ -181,7 +183,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg := msg.(type) {
 		case common.ExitFormMsg:
 			m.PopupState = -1
-			m.Form = models.ModelWpaEapForm()
+			m.Form = models.ModelWpaEapForm(m.Colors)
 
 			var formCmd tea.Cmd
 			var newForm tea.Model
@@ -191,7 +193,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case common.SubmitEapFormMsg:
 			m.SelectedEntry = 0
 			m.PopupState = -1
-			m.Form = models.ModelWpaEapForm()
+			m.Form = models.ModelWpaEapForm(m.Colors)
 
 			// Re-initialize the new form with the window size
 			var formCmd tea.Cmd
@@ -222,7 +224,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg := msg.(type) {
 		case common.SubmitConfirmationMsg:
 			m.PopupState = -1                           // Exit popup
-			m.Confirmation = models.ModelConfirmation() // Reset
+			m.Confirmation = models.ModelConfirmation(m.Colors) // Reset
 
 			if msg.Value { // User confirmed
 				// Delete the known network
@@ -248,7 +250,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg := msg.(type) {
 		case common.ExitFormMsg:
 			m.PopupState = -1
-			m.Form = models.ModelWpaEapForm()
+			m.Form = models.ModelWpaEapForm(m.Colors)
 
 			var formCmd tea.Cmd
 			var newForm tea.Model
@@ -257,7 +259,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, formCmd
 		case common.SubmitPasswordMsg:
 			m.PopupState = -1                            // Exit popup
-			m.PasswordForm = models.ModelPasswordInput() // Reset
+			m.PasswordForm = models.ModelPasswordInput(m.Colors) // Reset
 
 			if len(m.DeviceData) == 0 {
 				return m, func() tea.Msg {
@@ -471,6 +473,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					Signal:   m.KnownNetworks[m.SelectedEntry].Signal,
 				}
 				m.PopupState = 1
+				m.Confirmation = models.ModelConfirmation(m.Colors)
 				m.Confirmation.Message = fmt.Sprintf("Are you sure you want to delete the known network '%s'?\n", m.SelectedNetwork.SSID)
 
 				m.Overlay = updateOverlayModel(m, &m.Confirmation)
@@ -502,6 +505,7 @@ func (m NetpalaData) View() string {
 	m.Tables.VpnData = m.VpnData
 	m.Tables.KnownNetworks = m.KnownNetworks
 	m.Tables.ScannedNetworks = m.ScannedNetworks
+	m.Tables.Colors = m.Colors
 
 	switch m.PopupState {
 	case 0:

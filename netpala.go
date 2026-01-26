@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"netpala/common"
+	"netpala/config"
 	"netpala/dbus"
 	"netpala/models"
 	"netpala/network"
@@ -40,6 +41,10 @@ type NetpalaData struct {
 	Conn                *godbus.Conn
 	Err                 error
 	DBusSignals         chan *godbus.Signal
+
+	// Configuration
+	Config *config.Config
+	KeyMap config.AppKeyMap
 }
 
 // The initial command to load all data at startup.
@@ -121,6 +126,10 @@ func NetpalaModel() NetpalaData {
 		}
 	}
 
+	// Load configuration
+	cfg, _ := config.Load()
+	keyMap := config.NewAppKeyMap(cfg)
+
 	alert := bubbleup.NewAlertModel(40, true, 10)
 
 	return NetpalaData{
@@ -135,7 +144,7 @@ func NetpalaModel() NetpalaData {
 		ScannedNetworks: []common.ScannedNetwork{},
 
 		Tables:    models.TablesModel{},
-		StatusBar: models.ModelStatusBar(),
+		StatusBar: models.ModelStatusBar(keyMap),
 
 		PasswordForm: models.ModelPasswordInput(),
 		Form:         models.ModelWpaEapForm(),
@@ -148,6 +157,9 @@ func NetpalaModel() NetpalaData {
 
 		PopupState:          -1,
 		InitialLoadComplete: false,
+
+		Config: cfg,
+		KeyMap: keyMap,
 	}
 }
 
@@ -337,26 +349,35 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, dbus.RefreshAllData(m.Conn)
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "ctrl+q", "q", "ctrl+w":
+		keyStr := msg.String()
+
+		// Quit action
+		if m.Config.KeyBindings.Quit.Matches(keyStr) {
 			m.Conn.RemoveSignal(m.DBusSignals)
 			m.Conn.Close()
 			return m, tea.Quit
+		}
 
-		case "s":
+		// Scan action
+		if m.Config.KeyBindings.Scan.Matches(keyStr) {
 			var cmds []tea.Cmd
 			cmds = append(cmds, dbus.RequestScan(m.Conn))
 			cmds = append(cmds, func() tea.Msg {
 				return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(m.Conn))
 			})
-
 			return m, tea.Batch(cmds...)
-		case "up", "k":
+		}
+
+		// Up navigation
+		if m.Config.KeyBindings.Up.Matches(keyStr) {
 			if m.SelectedEntry > 0 {
 				m.SelectedEntry--
 			}
+			return m, nil
+		}
 
-		case "down", "j":
+		// Down navigation
+		if m.Config.KeyBindings.Down.Matches(keyStr) {
 			boxes := []int{len(m.KnownNetworks), len(m.ScannedNetworks)}
 			if len(m.VpnData) > 0 {
 				boxes = append(boxes, len(m.VpnData))
@@ -366,8 +387,11 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.selectedBox < len(boxes) && m.SelectedEntry < boxes[m.selectedBox]-1 {
 				m.SelectedEntry++
 			}
+			return m, nil
+		}
 
-		case "shift+tab":
+		// Previous pane navigation
+		if m.Config.KeyBindings.PrevPane.Matches(keyStr) {
 			boxAmount := 4
 			m.selectedBox = (m.selectedBox - 1 + boxAmount) % boxAmount
 			m.SelectedEntry = 0
@@ -375,8 +399,11 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.VpnData) == 0 && m.selectedBox == 2 {
 				m.selectedBox = 1
 			}
+			return m, nil
+		}
 
-		case "tab":
+		// Next pane navigation
+		if m.Config.KeyBindings.NextPane.Matches(keyStr) {
 			boxAmount := 4
 
 			m.selectedBox = (m.selectedBox + 1) % boxAmount
@@ -385,8 +412,11 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.VpnData) == 0 && m.selectedBox == 2 {
 				m.selectedBox = 3
 			}
+			return m, nil
+		}
 
-		case "enter", " ":
+		// Select/Connect action
+		if m.Config.KeyBindings.Select.Matches(keyStr) {
 			if m.selectedBox == 0 && len(m.KnownNetworks) > 0 && len(m.DeviceData) > 0 {
 				// Connect to known network
 				selectedNetwork := m.KnownNetworks[m.SelectedEntry]
@@ -427,7 +457,10 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Enable/Disable Wifi Card
 				return m, dbus.ToggleWifiCmd(m.Conn, !m.DeviceData[0].Powered)
 			}
-		case "delete", "backspace":
+		}
+
+		// Remove/Delete action
+		if m.Config.KeyBindings.Remove.Matches(keyStr) {
 			if m.selectedBox == 0 && len(m.KnownNetworks) > 0 {
 				// Delete known network
 				m.SelectedNetwork = common.ScannedNetwork{

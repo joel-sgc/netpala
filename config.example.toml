@@ -1,0 +1,56 @@
+# Netpala Configuration File
+# 
+# This is an example configuration file showing all available keybindings.
+# Copy this file to ~/.config/netpala/config.toml to customize your keybindings.
+#
+# Available modifiers: ctrl, alt, shift
+# Examples: "ctrl+c", "shift+tab", "alt+enter", "a", "up", "down", "left", "right"
+# Special keys: enter, space (use " "), tab, backspace, delete, esc, up, down, left, right
+# Multiple keys can be assigned to the same action.
+
+[keybindings]
+
+# Navigation - Move up in the current list
+[keybindings.up]
+keys = ["k", "up"]
+help = "Up"
+
+# Navigation - Move down in the current list
+[keybindings.down]
+keys = ["j", "down"]
+help = "Down"
+
+# Navigation - Move to the next pane/section
+[keybindings.next_pane]
+keys = ["tab"]
+help = "Next"
+
+# Navigation - Move to the previous pane/section
+[keybindings.prev_pane]
+keys = ["shift+tab"]
+help = "Prev"
+
+# Actions - Select/Connect to network or toggle VPN/WiFi
+[keybindings.select]
+keys = ["enter", " "]
+help = "Dis/Connect"
+
+# Actions - Remove/forget a saved network
+[keybindings.remove]
+keys = ["backspace", "delete"]
+help = "Remove"
+
+# Actions - Trigger a network scan
+[keybindings.scan]
+keys = ["s"]
+help = "Scan"
+
+# Application - Quit the application
+[keybindings.quit]
+keys = ["q", "ctrl+c", "ctrl+q", "ctrl+w"]
+help = "Quit"
+
+# Application - Cancel current operation/close popup
+[keybindings.cancel]
+keys = ["esc"]
+help = "Cancel"

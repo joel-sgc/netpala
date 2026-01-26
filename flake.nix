@@ -15,13 +15,22 @@
           pname = "netpala";
           version = "0.1.0";
 
-          src = ./.;
+          src = pkgs.lib.cleanSourceWith {
+            src = ./.;
+            filter = path: type:
+              let
+                baseName = baseNameOf path;
+              in
+              # Exclude vendor directory, result symlinks, and other non-essential files
+              !(baseName == "vendor" ||
+                baseName == "result" ||
+                pkgs.lib.hasPrefix "result-" baseName ||
+                baseName == ".direnv" ||
+                baseName == ".git" ||
+                baseName == "flake.lock");
+          };
 
-          vendorHash = null; # Set to null if using go.sum, or use pkgs.lib.fakeHash to get the real hash
-
-          # If vendorHash = null doesn't work, you may need to calculate the hash:
-          # Run: nix build and it will tell you the correct hash
-          # vendorHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+          vendorHash = "sha256-nSLOvVn4gtpUOmi+msKSHMBU+5ly9QEENQEeFrEbuII=";
 
           meta = with pkgs.lib; {
             description = "A lightweight terminal-friendly NetworkManager wrapper written in Go";
@@ -32,19 +41,18 @@
             mainProgram = "netpala";
           };
 
-          # Runtime dependencies
-          buildInputs = with pkgs; [
-            dbus
+          ldflags = [
+            "-s"
+            "-w"
           ];
 
-          # Ensure the binary can find dbus at runtime
+          # Runtime dependencies
           nativeBuildInputs = with pkgs; [
             pkg-config
           ];
 
-          ldflags = [
-            "-s"
-            "-w"
+          buildInputs = with pkgs; [
+            dbus
           ];
         };
       in

@@ -65,6 +65,62 @@ You'll need:
 
 ---
 
+### Install with Nix
+
+#### Run directly without installing
+
+```bash
+nix run github:joel-sgc/netpala
+```
+
+#### Install to profile
+
+```bash
+nix profile install github:joel-sgc/netpala
+```
+
+#### Add to NixOS configuration
+
+Add to your `flake.nix` inputs:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    netpala.url = "github:joel-sgc/netpala";
+  };
+}
+```
+
+Then either add to `environment.systemPackages`:
+
+```nix
+{ inputs, pkgs, ... }:
+{
+  environment.systemPackages = [ inputs.netpala.packages.${pkgs.system}.default ];
+}
+```
+
+Or use the provided NixOS module:
+
+```nix
+{ inputs, ... }:
+{
+  imports = [ inputs.netpala.nixosModules.default ];
+  programs.netpala.enable = true;
+}
+```
+
+#### Development shell
+
+```bash
+git clone https://github.com/joel-sgc/netpala.git
+cd netpala
+nix develop
+```
+
+---
+
 ### Omarchy / Waybar launcher example
 
 ```bash
@@ -93,6 +149,107 @@ windowrule = float 1, match:title com.omarchy.netpala
 
 - Space / Enter : Connect / Disconnect
 - Delete / Backspace : Remove network
+
+---
+
+## ⚙️ Configuration
+
+Netpala supports customizable keybindings through a configuration file located at `~/.config/netpala/config.toml`.
+
+On first run, a default configuration file will be created automatically. You can also copy the example config:
+
+```bash
+mkdir -p ~/.config/netpala
+cp config.example.toml ~/.config/netpala/config.toml
+```
+
+### Keybinding Configuration
+
+All keybindings can be customized in the config file. Example:
+
+```toml
+[keybindings]
+
+# Navigation
+[keybindings.up]
+keys = ["k", "up"]
+help = "Up"
+
+[keybindings.down]
+keys = ["j", "down"]
+help = "Down"
+
+[keybindings.next_pane]
+keys = ["tab"]
+help = "Next"
+
+[keybindings.prev_pane]
+keys = ["shift+tab"]
+help = "Prev"
+
+# Actions
+[keybindings.select]
+keys = ["enter", " "]
+help = "Dis/Connect"
+
+[keybindings.remove]
+keys = ["backspace", "delete"]
+help = "Remove"
+
+[keybindings.scan]
+keys = ["s"]
+help = "Scan"
+
+# Application
+[keybindings.quit]
+keys = ["q", "ctrl+c", "ctrl+q", "ctrl+w"]
+help = "Quit"
+
+[keybindings.cancel]
+keys = ["esc"]
+help = "Cancel"
+```
+
+### Available Modifiers and Keys
+
+- **Modifiers**: `ctrl`, `alt`, `shift`
+- **Special keys**: `enter`, `space` (use `" "`), `tab`, `backspace`, `delete`, `esc`, `up`, `down`, `left`, `right`
+- **Examples**: `"ctrl+c"`, `"shift+tab"`, `"alt+enter"`, `"a"`, `"up"`
+
+Multiple keys can be assigned to the same action by listing them in the `keys` array.
+
+### Color Configuration
+
+You can also customize the application colors in the same config file:
+
+```toml
+[colors]
+# Default text and UI elements
+primary = "#a7abca"        # Light blue-gray
+
+# Active/selected borders
+active = "#9cca69"         # Green
+
+# Active/selected text
+active_text = "#cda162"    # Orange
+
+# Selection bar background
+selection_bg = "#5a6988"   # Darker blue-gray for better contrast
+
+# Inactive/dimmed elements
+inactive = "#444a66"       # Dark gray
+
+# Error states
+error = "#ff0000"          # Red
+
+# Error text
+error_text = "#aa0000"     # Dark red
+```
+
+Colors can be specified as:
+- Hex color codes: `"#a7abca"`
+- Terminal color names: `"red"`, `"blue"`, `"green"`, etc.
+- ANSI color numbers: `"1"` (red), `"2"` (green), etc.
 
 ---
 

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"netpala/common"
+	"netpala/config"
 	"netpala/dbus"
 	"netpala/models"
 	"netpala/network"
@@ -40,6 +41,11 @@ type NetpalaData struct {
 	Conn                *godbus.Conn
 	Err                 error
 	DBusSignals         chan *godbus.Signal
+
+	// Configuration
+	Config *config.Config
+	KeyMap config.AppKeyMap
+	Colors config.Colors
 }
 
 // The initial command to load all data at startup.
@@ -121,6 +127,10 @@ func NetpalaModel() NetpalaData {
 		}
 	}
 
+	// Load configuration
+	cfg, _ := config.Load()
+	keyMap := config.NewAppKeyMap(cfg)
+
 	alert := bubbleup.NewAlertModel(40, true, 10)
 
 	return NetpalaData{
@@ -135,10 +145,10 @@ func NetpalaModel() NetpalaData {
 		ScannedNetworks: []common.ScannedNetwork{},
 
 		Tables:    models.TablesModel{},
-		StatusBar: models.ModelStatusBar(),
+		StatusBar: models.ModelStatusBar(keyMap, cfg.Colors),
 
-		PasswordForm: models.ModelPasswordInput(),
-		Form:         models.ModelWpaEapForm(),
+		PasswordForm: models.ModelPasswordInput(cfg.Colors),
+		Form:         models.ModelWpaEapForm(cfg.Colors),
 		Overlay: overlay.Model{
 			XPosition: overlay.Left,
 			YPosition: overlay.Center,
@@ -148,6 +158,10 @@ func NetpalaModel() NetpalaData {
 
 		PopupState:          -1,
 		InitialLoadComplete: false,
+
+		Config: cfg,
+		KeyMap: keyMap,
+		Colors: cfg.Colors,
 	}
 }
 
@@ -169,7 +183,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg := msg.(type) {
 		case common.ExitFormMsg:
 			m.PopupState = -1
-			m.Form = models.ModelWpaEapForm()
+			m.Form = models.ModelWpaEapForm(m.Colors)
 
 			var formCmd tea.Cmd
 			var newForm tea.Model
@@ -179,7 +193,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case common.SubmitEapFormMsg:
 			m.SelectedEntry = 0
 			m.PopupState = -1
-			m.Form = models.ModelWpaEapForm()
+			m.Form = models.ModelWpaEapForm(m.Colors)
 
 			// Re-initialize the new form with the window size
 			var formCmd tea.Cmd
@@ -210,7 +224,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg := msg.(type) {
 		case common.SubmitConfirmationMsg:
 			m.PopupState = -1                           // Exit popup
-			m.Confirmation = models.ModelConfirmation() // Reset
+			m.Confirmation = models.ModelConfirmation(m.Colors) // Reset
 
 			if msg.Value { // User confirmed
 				// Delete the known network
@@ -236,7 +250,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg := msg.(type) {
 		case common.ExitFormMsg:
 			m.PopupState = -1
-			m.Form = models.ModelWpaEapForm()
+			m.Form = models.ModelWpaEapForm(m.Colors)
 
 			var formCmd tea.Cmd
 			var newForm tea.Model
@@ -245,7 +259,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, formCmd
 		case common.SubmitPasswordMsg:
 			m.PopupState = -1                            // Exit popup
-			m.PasswordForm = models.ModelPasswordInput() // Reset
+			m.PasswordForm = models.ModelPasswordInput(m.Colors) // Reset
 
 			if len(m.DeviceData) == 0 {
 				return m, func() tea.Msg {
@@ -337,26 +351,35 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, dbus.RefreshAllData(m.Conn)
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "ctrl+q", "q", "ctrl+w":
+		keyStr := msg.String()
+
+		// Quit action
+		if m.Config.KeyBindings.Quit.Matches(keyStr) {
 			m.Conn.RemoveSignal(m.DBusSignals)
 			m.Conn.Close()
 			return m, tea.Quit
+		}
 
-		case "s":
+		// Scan action
+		if m.Config.KeyBindings.Scan.Matches(keyStr) {
 			var cmds []tea.Cmd
 			cmds = append(cmds, dbus.RequestScan(m.Conn))
 			cmds = append(cmds, func() tea.Msg {
 				return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(m.Conn))
 			})
-
 			return m, tea.Batch(cmds...)
-		case "up", "k":
+		}
+
+		// Up navigation
+		if m.Config.KeyBindings.Up.Matches(keyStr) {
 			if m.SelectedEntry > 0 {
 				m.SelectedEntry--
 			}
+			return m, nil
+		}
 
-		case "down", "j":
+		// Down navigation
+		if m.Config.KeyBindings.Down.Matches(keyStr) {
 			boxes := []int{len(m.KnownNetworks), len(m.ScannedNetworks)}
 			if len(m.VpnData) > 0 {
 				boxes = append(boxes, len(m.VpnData))
@@ -366,8 +389,11 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.selectedBox < len(boxes) && m.SelectedEntry < boxes[m.selectedBox]-1 {
 				m.SelectedEntry++
 			}
+			return m, nil
+		}
 
-		case "shift+tab":
+		// Previous pane navigation
+		if m.Config.KeyBindings.PrevPane.Matches(keyStr) {
 			boxAmount := 4
 			m.selectedBox = (m.selectedBox - 1 + boxAmount) % boxAmount
 			m.SelectedEntry = 0
@@ -375,8 +401,11 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.VpnData) == 0 && m.selectedBox == 2 {
 				m.selectedBox = 1
 			}
+			return m, nil
+		}
 
-		case "tab":
+		// Next pane navigation
+		if m.Config.KeyBindings.NextPane.Matches(keyStr) {
 			boxAmount := 4
 
 			m.selectedBox = (m.selectedBox + 1) % boxAmount
@@ -385,8 +414,11 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.VpnData) == 0 && m.selectedBox == 2 {
 				m.selectedBox = 3
 			}
+			return m, nil
+		}
 
-		case "enter", " ":
+		// Select/Connect action
+		if m.Config.KeyBindings.Select.Matches(keyStr) {
 			if m.selectedBox == 0 && len(m.KnownNetworks) > 0 && len(m.DeviceData) > 0 {
 				// Connect to known network
 				selectedNetwork := m.KnownNetworks[m.SelectedEntry]
@@ -427,7 +459,10 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Enable/Disable Wifi Card
 				return m, dbus.ToggleWifiCmd(m.Conn, !m.DeviceData[0].Powered)
 			}
-		case "delete", "backspace":
+		}
+
+		// Remove/Delete action
+		if m.Config.KeyBindings.Remove.Matches(keyStr) {
 			if m.selectedBox == 0 && len(m.KnownNetworks) > 0 {
 				// Delete known network
 				m.SelectedNetwork = common.ScannedNetwork{
@@ -438,6 +473,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					Signal:   m.KnownNetworks[m.SelectedEntry].Signal,
 				}
 				m.PopupState = 1
+				m.Confirmation = models.ModelConfirmation(m.Colors)
 				m.Confirmation.Message = fmt.Sprintf("Are you sure you want to delete the known network '%s'?\n", m.SelectedNetwork.SSID)
 
 				m.Overlay = updateOverlayModel(m, &m.Confirmation)
@@ -469,6 +505,7 @@ func (m NetpalaData) View() string {
 	m.Tables.VpnData = m.VpnData
 	m.Tables.KnownNetworks = m.KnownNetworks
 	m.Tables.ScannedNetworks = m.ScannedNetworks
+	m.Tables.Colors = m.Colors
 
 	switch m.PopupState {
 	case 0:

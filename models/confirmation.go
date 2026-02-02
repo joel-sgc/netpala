@@ -2,6 +2,7 @@ package models
 
 import (
 	"netpala/common"
+	"netpala/config"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -10,11 +11,13 @@ import (
 type Confirmation struct {
 	Message string
 	Value   bool
+	Colors  config.Colors
 }
 
-func ModelConfirmation() Confirmation {
+func ModelConfirmation(colors config.Colors) Confirmation {
 	return Confirmation{
-		Value: false,
+		Value:  false,
+		Colors: colors,
 	}
 }
 func (m Confirmation) Init() tea.Cmd {
@@ -43,22 +46,22 @@ func (m Confirmation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Confirmation) View() string {
 	containerStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#9cca69")).
-		Foreground(lipgloss.Color("#a7abca")).
+		BorderForeground(lipgloss.Color(m.Colors.Active)).
+		Foreground(lipgloss.Color(m.Colors.Primary)).
 		Align(lipgloss.Center).
 		Padding(0, 1).
 		Width(50)
 
 	inactiveBorderStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#444a66")).
+		BorderForeground(lipgloss.Color(m.Colors.Inactive)).
 		Align(lipgloss.Center).
 		Padding(0, 3).
 		Width(18)
 
 	activeBorderStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#cda162")).
+		BorderForeground(lipgloss.Color(m.Colors.ActiveText)).
 		Align(lipgloss.Center).
 		Padding(0, 3).
 		Width(18)

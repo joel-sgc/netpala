@@ -2,6 +2,7 @@ package models
 
 import (
 	"netpala/common"
+	"netpala/config"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -9,7 +10,6 @@ import (
 
 // TablesModel is a container model that holds all the main tables.
 type TablesModel struct {
-	// We'll populate these fields from the main model just before rendering.
 	SelectedBox   int
 	SelectedEntry int
 	KnownHeight   int
@@ -21,6 +21,8 @@ type TablesModel struct {
 	VpnData         []common.VpnConnection
 	KnownNetworks   []common.KnownNetwork
 	ScannedNetworks []common.ScannedNetwork
+	
+	Colors config.Colors
 }
 
 func (m TablesModel) Init() tea.Cmd {
@@ -34,10 +36,10 @@ func (m TablesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // View renders all tables in order.
 func (m TablesModel) View() string {
-	knownNetsTable := TableModel("Known Networks", m.SelectedBox == 0, m.SelectedEntry, m.KnownHeight, m.KnownNetworks, nil, nil, nil)
-	scannedNetsTable := TableModel("New Networks", m.SelectedBox == 1, m.SelectedEntry, m.ScannedHeight, nil, m.ScannedNetworks, nil, nil)
-	vpnTableModel := TableModel("Virtual Private Networks", m.SelectedBox == 2, m.SelectedEntry, m.VPNHeight, nil, nil, m.VpnData, nil)
-	deviceTable := TableModel("Device", m.SelectedBox == 3, m.SelectedEntry, m.DeviceHeight, nil, nil, nil, m.DeviceData)
+	knownNetsTable := TableModel("Known Networks", m.SelectedBox == 0, m.SelectedEntry, m.KnownHeight, m.KnownNetworks, nil, nil, nil, m.Colors)
+	scannedNetsTable := TableModel("New Networks", m.SelectedBox == 1, m.SelectedEntry, m.ScannedHeight, nil, m.ScannedNetworks, nil, nil, m.Colors)
+	vpnTableModel := TableModel("Virtual Private Networks", m.SelectedBox == 2, m.SelectedEntry, m.VPNHeight, nil, nil, m.VpnData, nil, m.Colors)
+	deviceTable := TableModel("Device", m.SelectedBox == 3, m.SelectedEntry, m.DeviceHeight, nil, nil, nil, m.DeviceData, m.Colors)
 
 	vpnView := vpnTableModel.View()
 	if len(m.VpnData) == 0 {

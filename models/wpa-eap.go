@@ -3,6 +3,7 @@ package models
 import (
 	"fmt"
 	"netpala/common"
+	"netpala/config"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -23,13 +24,14 @@ type WpaEapForm struct {
 	EapSelected   	bool
 	Phase2Selected	bool
 	DisableForm   	func()
+	Colors         	config.Colors
 }
 
 type EAPMethod struct {
 	Type string
 }
 
-func ModelWpaEapForm() WpaEapForm {
+func ModelWpaEapForm(colors config.Colors) WpaEapForm {
 	Identity := textinput.New()
 	Identity.Placeholder = "Identity"
 	Identity.Prompt = ""
@@ -50,7 +52,14 @@ func ModelWpaEapForm() WpaEapForm {
 	CaCert.Width = 32
 	CaCert.CharLimit = 512
 
-	return WpaEapForm{
+	m := WpaEapForm{
+		Identity:       Identity,
+		Password:       Password,
+		CaCert:         CaCert,
+		focused:        0,
+		EapSelected:    false,
+		Phase2Selected: false,
+		Colors:         colors,
 		EapMethod: selector.Model{
 			Data: []any{
 				EAPMethod{Type: "PEAP"},
@@ -59,16 +68,8 @@ func ModelWpaEapForm() WpaEapForm {
 				EAPMethod{Type: "PWD"},
 			},
 			PerPage: 4,
-			FinishedFunc: completedFunc([]string{
-				"PEAP",
-				"TTLS",
-				"TLS",
-				"PWD",
-			}),
-			SelectedFunc:   selectedFunc,
-			UnSelectedFunc: unselectedFunc,
-			HeaderFunc:     emptyFunc,
-			FooterFunc:     emptyFunc,
+			HeaderFunc: emptyFunc,
+			FooterFunc: emptyFunc,
 		},
 		Phase2Auth: selector.Model{
 			Data: []any{
@@ -79,26 +80,34 @@ func ModelWpaEapForm() WpaEapForm {
 				EAPMethod{Type: "NONE"},
 			},
 			PerPage: 5,
-			FinishedFunc: completedFunc([]string{
-				"MSCHAPV2",
-				"PAP",
-				"CHAP",
-				"MSCHAP",
-				"NONE",
-			}),
-			SelectedFunc:   unselectedFunc,
-			UnSelectedFunc: unselectedFunc,
-			HeaderFunc:     emptyFunc,
-			FooterFunc:     emptyFunc,
+			HeaderFunc: emptyFunc,
+			FooterFunc: emptyFunc,
 		},
-		Identity:       Identity,
-		Password:       Password,
-		CaCert:         CaCert,
-		focused:        0,
-		EapSelected:    false,
-		Phase2Selected: false,
 	}
+	
+	// Set the functions that need access to colors
+	m.EapMethod.SelectedFunc = makeSelectedFunc(colors)
+	m.EapMethod.UnSelectedFunc = makeUnselectedFunc(colors)
+	m.EapMethod.FinishedFunc = makeCompletedFunc([]string{
+		"PEAP",
+		"TTLS",
+		"TLS",
+		"PWD",
+	}, colors)
+	
+	m.Phase2Auth.SelectedFunc = makeUnselectedFunc(colors)
+	m.Phase2Auth.UnSelectedFunc = makeUnselectedFunc(colors)
+	m.Phase2Auth.FinishedFunc = makeCompletedFunc([]string{
+		"MSCHAPV2",
+		"PAP",
+		"CHAP",
+		"MSCHAP",
+		"NONE",
+	}, colors)
+	
+	return m
 }
+
 func (m WpaEapForm) Init() tea.Cmd {
 	return textinput.Blink
 }
@@ -133,15 +142,15 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			switch m.focused {
 			case 0:
-				m.EapMethod.SelectedFunc = selectedFunc
-				m.Phase2Auth.SelectedFunc = unselectedFunc
+				m.EapMethod.SelectedFunc = makeSelectedFunc(m.Colors)
+				m.Phase2Auth.SelectedFunc = makeUnselectedFunc(m.Colors)
 			case 1:
-				m.EapMethod.SelectedFunc = unselectedFunc
-				m.Phase2Auth.SelectedFunc = selectedFunc
+				m.EapMethod.SelectedFunc = makeUnselectedFunc(m.Colors)
+				m.Phase2Auth.SelectedFunc = makeSelectedFunc(m.Colors)
 			case 2:
 				m.Identity.Focus()
-				m.EapMethod.SelectedFunc = unselectedFunc
-				m.Phase2Auth.SelectedFunc = unselectedFunc
+				m.EapMethod.SelectedFunc = makeUnselectedFunc(m.Colors)
+				m.Phase2Auth.SelectedFunc = makeUnselectedFunc(m.Colors)
 			case 3:
 				m.Password.Focus()
 			case 4:
@@ -203,8 +212,8 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if msg.(tea.KeyMsg).String() == "enter" {
 				m.focused++
-				m.EapMethod.SelectedFunc = unselectedFunc
-				m.Phase2Auth.SelectedFunc = selectedFunc
+				m.EapMethod.SelectedFunc = makeUnselectedFunc(m.Colors)
+				m.Phase2Auth.SelectedFunc = makeSelectedFunc(m.Colors)
 			}
 		case 1:
 			sm, cmd = m.Phase2Auth.Update(msg)
@@ -212,8 +221,8 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 
 			if msg.(tea.KeyMsg).String() == "enter" {
-				m.EapMethod.SelectedFunc = unselectedFunc
-				m.Phase2Auth.SelectedFunc = unselectedFunc
+				m.EapMethod.SelectedFunc = makeUnselectedFunc(m.Colors)
+				m.Phase2Auth.SelectedFunc = makeUnselectedFunc(m.Colors)
 				m.Identity.Focus()
 				m.focused++
 			}
@@ -241,25 +250,25 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m WpaEapForm) View() string {
 	inactiveBorderStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#444a66")).
+		BorderForeground(lipgloss.Color(m.Colors.Inactive)).
 		Padding(0, 1)
 
 	activeBorderStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#a7abca")).
+		BorderForeground(lipgloss.Color(m.Colors.Primary)).
 		Padding(0, 1)
 
 	inactiveLabelStyle := lipgloss.NewStyle().
 		Bold(false).
-		Foreground(lipgloss.Color("#a7abca"))
+		Foreground(lipgloss.Color(m.Colors.Primary))
 
 	activeLabelStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color("#cda162"))
+		Foreground(lipgloss.Color(m.Colors.ActiveText))
 
 	formStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#9cca69")).
+		BorderForeground(lipgloss.Color(m.Colors.Active)).
 		Padding(0, 1)
 
 	// Always render all text boxes, just change the style.
@@ -299,7 +308,7 @@ func (m WpaEapForm) View() string {
 			Width(36).
 			Bold(true).
 			Align(lipgloss.Center).
-			BorderForeground(lipgloss.Color("#cda162")).
+			BorderForeground(lipgloss.Color(m.Colors.ActiveText)).
 			Render("Connect")
 	}
 	// --- END NEW LOGIC ---
@@ -334,29 +343,33 @@ func (m WpaEapForm) View() string {
 	return formStyle.Render(content)
 }
 
-func selectedFunc(m selector.Model, obj any, gdIndex int) string {
-	str := obj.(EAPMethod).Type
-	return lipgloss.NewStyle().Bold(false).Background(lipgloss.Color("#a7abca")).Foreground(lipgloss.Color("#444a66")).Render(fmt.Sprintf(" %d. %s", gdIndex+1, str))
+func makeSelectedFunc(colors config.Colors) func(selector.Model, any, int) string {
+	return func(sm selector.Model, obj any, gdIndex int) string {
+		str := obj.(EAPMethod).Type
+		return lipgloss.NewStyle().Bold(false).Background(lipgloss.Color(colors.SelectionBg)).Foreground(lipgloss.Color(colors.Inactive)).Render(fmt.Sprintf(" %d. %s", gdIndex+1, str))
+	}
 }
 
-func unselectedFunc(m selector.Model, obj any, gdIndex int) string {
-	str := obj.(EAPMethod).Type
-	return lipgloss.NewStyle().Bold(false).Foreground(lipgloss.Color("#a7abca")).Render(fmt.Sprintf(" %d. %s", gdIndex+1, str))
+func makeUnselectedFunc(colors config.Colors) func(selector.Model, any, int) string {
+	return func(sm selector.Model, obj any, gdIndex int) string {
+		str := obj.(EAPMethod).Type
+		return lipgloss.NewStyle().Bold(false).Foreground(lipgloss.Color(colors.Primary)).Render(fmt.Sprintf(" %d. %s", gdIndex+1, str))
+	}
 }
 
 func emptyFunc(m selector.Model, obj any, gdIndex int) string {
 	return ""
 }
 
-func completedFunc(options []string) func(selected any) string {
+func makeCompletedFunc(options []string, colors config.Colors) func(any) string {
 	return func(selected any) string {
 		str := ""
 
 		for i, option := range options {
 			if option == selected.(EAPMethod).Type {
-				str += lipgloss.NewStyle().Foreground(lipgloss.Color("#cda162")).Render(fmt.Sprintf("%s  %d. %s", "»", i+1, option)) + "\n"
+				str += lipgloss.NewStyle().Foreground(lipgloss.Color(colors.ActiveText)).Render(fmt.Sprintf("%s  %d. %s", "»", i+1, option)) + "\n"
 			} else {
-				str += fmt.Sprintf("  %s", unselectedFunc(selector.Model{}, EAPMethod{Type: option}, i)) + "\n"
+				str += fmt.Sprintf("  %s", makeUnselectedFunc(colors)(selector.Model{}, EAPMethod{Type: option}, i)) + "\n"
 			}
 		}
 

@@ -98,11 +98,11 @@ func padHeaders(headers []string, headerLengths []int) []string {
 	return finalHeaders
 }
 
-func CalcTitle(title string, selected bool) string {
-	color := "#a7abca"
+func CalcTitle(title string, selected bool, primaryColor, activeColor string) string {
+	color := primaryColor
 	bold := false
 	if selected {
-		color = "#9cca69"
+		color = activeColor
 		bold = true
 	}
 	width := WindowDimensions().Width
@@ -118,10 +118,15 @@ var BoxBorder = lipgloss.Border{
 	Bottom: "─", Left: "│", Right: "│",
 	BottomLeft: "└", BottomRight: "┘",
 }
-var ActiveBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#9cca69"))
-var InactiveBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#a7abca"))
+func ActiveBorderStyle(color string) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+}
 
-func BoxStyle(selectedRow int, selectedBox bool, height int) func(row, col int) lipgloss.Style {
+func InactiveBorderStyle(color string) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+}
+
+func BoxStyle(selectedRow int, selectedBox bool, height int, primaryColor, activeTextColor, inactiveColor, selectionBg string) func(row, col int) lipgloss.Style {
 	return func(row int, col int) lipgloss.Style {
 		switch {
 		case row == 0:
@@ -129,18 +134,18 @@ func BoxStyle(selectedRow int, selectedBox bool, height int) func(row, col int) 
 				Bold(true).
 				Foreground(func() lipgloss.Color {
 					if selectedBox {
-						return lipgloss.Color("#cda162")
+						return lipgloss.Color(activeTextColor)
 					}
-					return lipgloss.Color("#a7abca")
+					return lipgloss.Color(primaryColor)
 				}()).
 				AlignHorizontal(lipgloss.Center)
 		case row == min(selectedRow+2, height+1) && selectedBox:
 			return lipgloss.NewStyle().
-				Background(lipgloss.Color("#a7abca")).
-				Foreground(lipgloss.Color("#444a66")).
+				Background(lipgloss.Color(selectionBg)).
+				Foreground(lipgloss.Color(inactiveColor)).
 				AlignHorizontal(lipgloss.Center)
 		default:
-			return lipgloss.NewStyle().Foreground(lipgloss.Color("#a7abca")).AlignHorizontal(lipgloss.Center)
+			return lipgloss.NewStyle().Foreground(lipgloss.Color(primaryColor)).AlignHorizontal(lipgloss.Center)
 		}
 	}
 }

@@ -280,3 +280,95 @@ func DeleteConnectionCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath) tea.Cm
 		return nil
 	}
 }
+
+// cleanSettingsForUpdate removes fields that have incompatible types between GetSettings and Update.
+// NetworkManager returns some fields (like ipv4/ipv6 addresses) in a different format than Update expects.
+func cleanSettingsForUpdate(settings map[string]map[string]dbus.Variant) {
+	// Fields that have type mismatches between GetSettings and Update
+	problematicFields := map[string][]string{
+		"ipv4": {"addresses", "routes", "dns", "address-data", "route-data"},
+		"ipv6": {"addresses", "routes", "dns", "address-data", "route-data"},
+	}
+
+	for section, fields := range problematicFields {
+		if settings[section] != nil {
+			for _, field := range fields {
+				delete(settings[section], field)
+			}
+		}
+	}
+}
+
+// ToggleAutoConnectCmd toggles the autoconnect setting for a saved connection.
+func ToggleAutoConnectCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath, currentValue bool) tea.Cmd {
+	return func() tea.Msg {
+		connObj := conn.Object(network.NMDest, connectionPath)
+
+		// 1. Get current settings
+		var settings map[string]map[string]dbus.Variant
+		call := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSettings", 0)
+		if call.Err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to get connection settings: %w", call.Err)}
+		}
+		if err := call.Store(&settings); err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to parse connection settings: %w", err)}
+		}
+
+		// 2. Remove fields with incompatible types
+		cleanSettingsForUpdate(settings)
+
+		// 3. Ensure connection section exists
+		if settings["connection"] == nil {
+			settings["connection"] = make(map[string]dbus.Variant)
+		}
+
+		// 4. Toggle autoconnect
+		settings["connection"]["autoconnect"] = dbus.MakeVariant(!currentValue)
+
+		// 5. Update the connection
+		call = connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.Update", 0, settings)
+		if call.Err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to update connection: %w", call.Err)}
+		}
+
+		// 6. Return refresh
+		return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(conn))
+	}
+}
+
+// ToggleHiddenCmd toggles the hidden setting for a saved wireless connection.
+func ToggleHiddenCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath, currentValue bool) tea.Cmd {
+	return func() tea.Msg {
+		connObj := conn.Object(network.NMDest, connectionPath)
+
+		// 1. Get current settings
+		var settings map[string]map[string]dbus.Variant
+		call := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSettings", 0)
+		if call.Err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to get connection settings: %w", call.Err)}
+		}
+		if err := call.Store(&settings); err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to parse connection settings: %w", err)}
+		}
+
+		// 2. Remove fields with incompatible types
+		cleanSettingsForUpdate(settings)
+
+		// 3. Ensure 802-11-wireless section exists
+		if settings["802-11-wireless"] == nil {
+			return common.ErrMsg{Err: fmt.Errorf("connection is not a wireless connection")}
+		}
+
+		// 4. Toggle hidden
+		settings["802-11-wireless"]["hidden"] = dbus.MakeVariant(!currentValue)
+
+		// 5. Update the connection
+		call = connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.Update", 0, settings)
+		if call.Err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to update connection: %w", call.Err)}
+		}
+
+		// 6. Return refresh
+		return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(conn))
+	}
+}

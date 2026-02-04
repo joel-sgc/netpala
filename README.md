@@ -200,6 +200,14 @@ help = "Remove"
 keys = ["s"]
 help = "Scan"
 
+[keybindings.toggle_autoconnect]
+keys = ["a"]
+help = "Auto"
+
+[keybindings.toggle_hidden]
+keys = ["h"]
+help = "Hidden"
+
 # Application
 [keybindings.quit]
 keys = ["q", "ctrl+c", "ctrl+q", "ctrl+w"]

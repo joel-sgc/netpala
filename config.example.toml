@@ -45,6 +45,16 @@ help = "Remove"
 keys = ["s"]
 help = "Scan"
 
+# Actions - Toggle auto-connect for a known network
+[keybindings.toggle_autoconnect]
+keys = ["a"]
+help = "Auto"
+
+# Actions - Toggle hidden status for a known network
+[keybindings.toggle_hidden]
+keys = ["h"]
+help = "Hidden"
+
 # Application - Quit the application
 [keybindings.quit]
 keys = ["q", "ctrl+c", "ctrl+q", "ctrl+w"]

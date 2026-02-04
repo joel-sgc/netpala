@@ -124,7 +124,7 @@ func GetKnownNetworks(conn *dbus.Conn) []common.KnownNetwork {
 		if hv, ok := wcfg["hidden"]; ok {
 			hidden = hv.Value().(bool)
 		}
-		auto := false
+		auto := true
 		if cSec, ok := s["connection"]; ok {
 			if av, ok := cSec["autoconnect"]; ok {
 				auto = av.Value().(bool)

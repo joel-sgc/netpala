@@ -232,7 +232,7 @@ func FormatVpnData(vpns []VpnConnection) [][]string {
 
 func FormatKnownNetworksData(networks []KnownNetwork, selectedRow int, height int) [][]string {
 	base := [][]string{
-		padHeaders([]string{"", "Name", "Security", "Hidden", "Auto Connect", "Signal"}, []int{5, -1, 12, 10, 16, 10}), {""},
+		padHeaders([]string{"", "Name", "Security", "Hidden", "Auto-Connect", "Signal"}, []int{5, -1, 12, 10, 16, 10}), {""},
 	}
 	window := FormatArrays(networks, selectedRow, height)
 	for _, n := range window {

@@ -327,6 +327,11 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// NOTE: Do NOT call m.Alert.Update(msg) here.
 		return m, alertCmd
 
+	case common.RefreshKnownNetworksMsg:
+		return m, func() tea.Msg {
+			return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(m.Conn))
+		}
+
 	case tea.WindowSizeMsg:
 		var cmds []tea.Cmd
 
@@ -478,6 +483,22 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				m.Overlay = updateOverlayModel(m, &m.Confirmation)
 				return m, nil
+			}
+		}
+
+		// Toggle Auto-Connect action (only for known networks)
+		if m.Config.KeyBindings.ToggleAutoConnect.Matches(keyStr) {
+			if m.selectedBox == 0 && len(m.KnownNetworks) > 0 {
+				selectedNetwork := m.KnownNetworks[m.SelectedEntry]
+				return m, dbus.ToggleAutoConnectCmd(m.Conn, selectedNetwork.Path, selectedNetwork.AutoConnect)
+			}
+		}
+
+		// Toggle Hidden action (only for known networks)
+		if m.Config.KeyBindings.ToggleHidden.Matches(keyStr) {
+			if m.selectedBox == 0 && len(m.KnownNetworks) > 0 {
+				selectedNetwork := m.KnownNetworks[m.SelectedEntry]
+				return m, dbus.ToggleHiddenCmd(m.Conn, selectedNetwork.Path, selectedNetwork.Hidden)
 			}
 		}
 	}

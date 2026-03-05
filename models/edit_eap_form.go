@@ -396,7 +396,7 @@ func (m EditEapForm) View() string {
 		Width(56).
 		Align(lipgloss.Center)
 	hdrLabelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.Colors.Inactive)).
+		Foreground(lipgloss.Color(m.Colors.Active)).
 		Bold(true)
 	hdrValueStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.Colors.Primary))

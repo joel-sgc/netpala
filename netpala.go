@@ -480,6 +480,22 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+
+		// Toggle autoconnect action
+		if m.Config.KeyBindings.ToggleAutoconnect.Matches(keyStr) {
+			if m.selectedBox == 0 && len(m.KnownNetworks) > 0 {
+				selectedNetwork := m.KnownNetworks[m.SelectedEntry]
+				return m, dbus.ToggleAutoconnectCmd(m.Conn, selectedNetwork.Path, selectedNetwork.AutoConnect)
+			}
+		}
+
+		// Toggle hidden action
+		if m.Config.KeyBindings.ToggleHidden.Matches(keyStr) {
+			if m.selectedBox == 0 && len(m.KnownNetworks) > 0 {
+				selectedNetwork := m.KnownNetworks[m.SelectedEntry]
+				return m, dbus.ToggleHiddenCmd(m.Conn, selectedNetwork.Path, selectedNetwork.Hidden)
+			}
+		}
 	}
 
 	var updatedAlert tea.Model

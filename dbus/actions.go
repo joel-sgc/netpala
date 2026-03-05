@@ -265,6 +265,73 @@ func ToggleWifiCmd(conn *dbus.Conn, enable bool) tea.Cmd {
 	}
 }
 
+// ToggleAutoconnectCmd flips the autoconnect setting on a saved connection profile.
+func ToggleAutoconnectCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath, currentAutoConnect bool) tea.Cmd {
+	return func() tea.Msg {
+		connObj := conn.Object(network.NMDest, connectionPath)
+
+		var settings map[string]map[string]dbus.Variant
+		if err := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSettings", 0).Store(&settings); err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to get connection settings: %w", err)}
+		}
+
+		if settings["connection"] == nil {
+			settings["connection"] = map[string]dbus.Variant{}
+		}
+		settings["connection"]["autoconnect"] = dbus.MakeVariant(!currentAutoConnect)
+
+		// Strip legacy fields that don't survive a GetSettings→Update round-trip.
+		// NM returns addresses/routes as a(ayuay) but godbus re-serialises them as
+		// aav, causing a type-mismatch error. NM rebuilds these from address-data /
+		// route-data, so removing them is safe.
+		for _, section := range []string{"ipv4", "ipv6"} {
+			if sec, ok := settings[section]; ok {
+				delete(sec, "addresses")
+				delete(sec, "routes")
+			}
+		}
+
+		call := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.Update", 0, settings)
+		if call.Err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to update connection: %w", call.Err)}
+		}
+
+		return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(conn))
+	}
+}
+
+// ToggleHiddenCmd flips the hidden (SSID broadcast) setting on a saved connection profile.
+func ToggleHiddenCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath, currentHidden bool) tea.Cmd {
+	return func() tea.Msg {
+		connObj := conn.Object(network.NMDest, connectionPath)
+
+		var settings map[string]map[string]dbus.Variant
+		if err := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSettings", 0).Store(&settings); err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to get connection settings: %w", err)}
+		}
+
+		if settings["802-11-wireless"] == nil {
+			settings["802-11-wireless"] = map[string]dbus.Variant{}
+		}
+		settings["802-11-wireless"]["hidden"] = dbus.MakeVariant(!currentHidden)
+
+		// Strip legacy fields that don't survive a GetSettings→Update round-trip.
+		for _, section := range []string{"ipv4", "ipv6"} {
+			if sec, ok := settings[section]; ok {
+				delete(sec, "addresses")
+				delete(sec, "routes")
+			}
+		}
+
+		call := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.Update", 0, settings)
+		if call.Err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to update connection: %w", call.Err)}
+		}
+
+		return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(conn))
+	}
+}
+
 // DeleteConnectionCmd tells NetworkManager to delete a saved connection profile.
 func DeleteConnectionCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath) tea.Cmd {
 	return func() tea.Msg {

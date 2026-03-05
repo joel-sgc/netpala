@@ -38,6 +38,27 @@ type ExitFormMsg struct{}
 type SubmitEapFormMsg struct {
 	Config map[string]string
 }
+type SubmitEditFormMsg struct {
+	ConnectionPath dbus.ObjectPath
+	Config         map[string]string
+}
+// EapEditSettingsMsg carries the current EAP connection settings loaded from
+// D-Bus (GetSettings + GetSecrets) so the edit form can be pre-populated.
+type EapEditSettingsMsg struct {
+	ConnectionPath dbus.ObjectPath
+	SSID           string
+	EapMethod      string
+	Phase2Auth     string
+	Identity       string
+	Password       string
+	CaCert         string
+	AutoConnect    bool
+	Hidden         bool
+}
+type SubmitEditEapFormMsg struct {
+	ConnectionPath dbus.ObjectPath
+	Config         map[string]string
+}
 type SubmitConfirmationMsg struct {
 	Value bool
 }

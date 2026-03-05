@@ -29,6 +29,7 @@ type KeyBindings struct {
 	Scan              KeyBinding `toml:"scan"`
 	ToggleAutoconnect KeyBinding `toml:"toggle_autoconnect"`
 	ToggleHidden      KeyBinding `toml:"toggle_hidden"`
+	Edit              KeyBinding `toml:"edit"`
 
 	// Application
 	Quit   KeyBinding `toml:"quit"`
@@ -92,6 +93,10 @@ func DefaultKeyBindings() KeyBindings {
 		ToggleHidden: KeyBinding{
 			Keys: []string{"h"},
 			Help: "Hidden",
+		},
+		Edit: KeyBinding{
+			Keys: []string{"e"},
+			Help: "Edit",
 		},
 		Quit: KeyBinding{
 			Keys: []string{"q", "ctrl+c", "ctrl+q", "ctrl+w"},
@@ -245,6 +250,9 @@ func mergeWithDefaults(cfg Config) Config {
 	if len(cfg.KeyBindings.ToggleHidden.Keys) == 0 {
 		cfg.KeyBindings.ToggleHidden = defaults.ToggleHidden
 	}
+	if len(cfg.KeyBindings.Edit.Keys) == 0 {
+		cfg.KeyBindings.Edit = defaults.Edit
+	}
 	if len(cfg.KeyBindings.Quit.Keys) == 0 {
 		cfg.KeyBindings.Quit = defaults.Quit
 	}
@@ -279,6 +287,9 @@ func mergeWithDefaults(cfg Config) Config {
 	}
 	if cfg.KeyBindings.ToggleHidden.Help == "" {
 		cfg.KeyBindings.ToggleHidden.Help = defaults.ToggleHidden.Help
+	}
+	if cfg.KeyBindings.Edit.Help == "" {
+		cfg.KeyBindings.Edit.Help = defaults.Edit.Help
 	}
 	if cfg.KeyBindings.Quit.Help == "" {
 		cfg.KeyBindings.Quit.Help = defaults.Quit.Help
@@ -388,6 +399,7 @@ type AppKeyMap struct {
 	Scan              key.Binding
 	ToggleAutoconnect key.Binding
 	ToggleHidden      key.Binding
+	Edit              key.Binding
 	Quit              key.Binding
 	Cancel            key.Binding
 }
@@ -404,6 +416,7 @@ func NewAppKeyMap(cfg *Config) AppKeyMap {
 		Scan:              cfg.KeyBindings.Scan.ToKeyBinding(),
 		ToggleAutoconnect: cfg.KeyBindings.ToggleAutoconnect.ToKeyBinding(),
 		ToggleHidden:      cfg.KeyBindings.ToggleHidden.ToKeyBinding(),
+		Edit:              cfg.KeyBindings.Edit.ToKeyBinding(),
 		Quit:              cfg.KeyBindings.Quit.ToKeyBinding(),
 		Cancel:            cfg.KeyBindings.Cancel.ToKeyBinding(),
 	}
@@ -413,7 +426,7 @@ func NewAppKeyMap(cfg *Config) AppKeyMap {
 func (k AppKeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		k.Up, k.Down, k.Select, k.Remove,
-		k.Scan, k.ToggleAutoconnect, k.ToggleHidden, k.NextPane, k.Quit,
+		k.Scan, k.ToggleAutoconnect, k.ToggleHidden, k.Edit, k.NextPane, k.Quit,
 	}
 }
 
@@ -421,6 +434,6 @@ func (k AppKeyMap) ShortHelp() []key.Binding {
 func (k AppKeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.NextPane, k.PrevPane},
-		{k.Select, k.Remove, k.Scan, k.ToggleAutoconnect, k.ToggleHidden, k.Quit},
+		{k.Select, k.Remove, k.Scan, k.ToggleAutoconnect, k.ToggleHidden, k.Edit, k.Quit},
 	}
 }

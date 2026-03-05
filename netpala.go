@@ -32,9 +32,11 @@ type NetpalaData struct {
 	Form         models.WpaEapForm
 	Confirmation models.Confirmation
 	PasswordForm models.PasswordInput
+	EditForm     models.EditForm
+	EapEditForm  models.EditEapForm
 
 	SelectedNetwork common.ScannedNetwork
-	PopupState      int // -1: no popup, 0: form, 1: confirm
+	PopupState      int // -1: no popup, 0: EAP form, 1: confirm, 2: password, 3: edit, 4: EAP edit
 
 	Alert               bubbleup.AlertModel
 	InitialLoadComplete bool
@@ -149,6 +151,8 @@ func NetpalaModel() NetpalaData {
 
 		PasswordForm: models.ModelPasswordInput(cfg.Colors),
 		Form:         models.ModelWpaEapForm(cfg.Colors),
+		EditForm:     models.ModelEditForm(common.KnownNetwork{}, cfg.Colors),
+		EapEditForm:  models.ModelEditEapForm(common.EapEditSettingsMsg{}, cfg.Colors),
 		Overlay: overlay.Model{
 			XPosition: overlay.Left,
 			YPosition: overlay.Center,
@@ -279,6 +283,36 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Return the confirmation model and any command it produced
 			return m, cmd
 		}
+	case 3:
+		// Handle the edit form popup state
+		switch msg := msg.(type) {
+		case common.ExitFormMsg:
+			m.PopupState = -1
+			return m, nil
+		case common.SubmitEditFormMsg:
+			m.PopupState = -1
+			return m, dbus.UpdateConnectionCmd(m.Conn, msg.ConnectionPath, msg.Config)
+		default:
+			var newEditForm tea.Model
+			newEditForm, cmd = m.EditForm.Update(msg)
+			m.EditForm = newEditForm.(models.EditForm)
+			return m, cmd
+		}
+	case 4:
+		// Handle the EAP edit form popup state
+		switch msg := msg.(type) {
+		case common.ExitFormMsg:
+			m.PopupState = -1
+			return m, nil
+		case common.SubmitEditEapFormMsg:
+			m.PopupState = -1
+			return m, dbus.UpdateEapConnectionCmd(m.Conn, msg.ConnectionPath, msg.Config)
+		default:
+			var newEapEditForm tea.Model
+			newEapEditForm, cmd = m.EapEditForm.Update(msg)
+			m.EapEditForm = newEapEditForm.(models.EditEapForm)
+			return m, cmd
+		}
 	}
 
 	switch msg := msg.(type) {
@@ -327,6 +361,18 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// NOTE: Do NOT call m.Alert.Update(msg) here.
 		return m, alertCmd
 
+	case common.EapEditSettingsMsg:
+		m.EapEditForm = models.ModelEditEapForm(msg, m.Colors)
+
+		var eapEditFormCmd tea.Cmd
+		var newEapEditForm tea.Model
+		newEapEditForm, eapEditFormCmd = m.EapEditForm.Update(tea.WindowSizeMsg{Width: m.Width, Height: m.Height})
+		m.EapEditForm = newEapEditForm.(models.EditEapForm)
+
+		m.PopupState = 4
+		m.Overlay = updateOverlayModel(m, &m.EapEditForm)
+		return m, eapEditFormCmd
+
 	case tea.WindowSizeMsg:
 		var cmds []tea.Cmd
 
@@ -338,6 +384,12 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newForm, formCmd = m.Form.Update(msg)
 		m.Form = newForm.(models.WpaEapForm)
 		cmds = append(cmds, formCmd)
+
+		var eapEditFormCmd tea.Cmd
+		var newEapEditForm tea.Model
+		newEapEditForm, eapEditFormCmd = m.EapEditForm.Update(msg)
+		m.EapEditForm = newEapEditForm.(models.EditEapForm)
+		cmds = append(cmds, eapEditFormCmd)
 
 		var statusCmd tea.Cmd
 		var newStatus tea.Model
@@ -498,6 +550,21 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, dbus.ToggleHiddenCmd(m.Conn, selectedNetwork.Path, selectedNetwork.Hidden)
 			}
 		}
+
+		// Edit action
+		if m.Config.KeyBindings.Edit.Matches(keyStr) {
+			if m.selectedBox == 0 && len(m.KnownNetworks) > 0 {
+				selectedNetwork := m.KnownNetworks[m.SelectedEntry]
+				if selectedNetwork.Security == "wpa2-eap" {
+					// Async load EAP settings, then open EAP edit form (popup state 4)
+					return m, dbus.LoadEapEditSettingsCmd(m.Conn, selectedNetwork.Path, selectedNetwork)
+				}
+				m.EditForm = models.ModelEditForm(selectedNetwork, m.Colors)
+				m.PopupState = 3
+				m.Overlay = updateOverlayModel(m, &m.EditForm)
+				return m, nil
+			}
+		}
 	}
 
 	var updatedAlert tea.Model
@@ -534,6 +601,12 @@ func (m NetpalaData) View() string {
 		return m.Alert.Render(m.Overlay.View() + m.StatusBar.View())
 	case 2:
 		m.Overlay = updateOverlayModel(m, &m.PasswordForm)
+		return m.Alert.Render(m.Overlay.View() + m.StatusBar.View())
+	case 3:
+		m.Overlay = updateOverlayModel(m, &m.EditForm)
+		return m.Alert.Render(m.Overlay.View() + m.StatusBar.View())
+	case 4:
+		m.Overlay = updateOverlayModel(m, &m.EapEditForm)
 		return m.Alert.Render(m.Overlay.View() + m.StatusBar.View())
 	default:
 		return m.Alert.Render(m.Tables.View() + m.StatusBar.View())

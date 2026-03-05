@@ -336,6 +336,60 @@ func ToggleHiddenCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath, currentHid
 	}
 }
 
+// UpdateConnectionCmd reads a saved WPA-PSK/open connection, applies the user's
+// edits (SSID, password, hidden, autoconnect), and writes them back via D-Bus.
+func UpdateConnectionCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath, config map[string]string) tea.Cmd {
+	return func() tea.Msg {
+		connObj := conn.Object(network.NMDest, connectionPath)
+
+		var settings map[string]map[string]dbus.Variant
+		if err := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSettings", 0).Store(&settings); err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to get connection settings: %w", err)}
+		}
+
+		// -- connection section --
+		if settings["connection"] == nil {
+			settings["connection"] = map[string]dbus.Variant{}
+		}
+		if ssid, ok := config["ssid"]; ok && ssid != "" {
+			settings["connection"]["id"] = dbus.MakeVariant(ssid)
+		}
+		settings["connection"]["autoconnect"] = dbus.MakeVariant(config["autoconnect"] == "true")
+
+		// -- 802-11-wireless section --
+		if settings["802-11-wireless"] == nil {
+			settings["802-11-wireless"] = map[string]dbus.Variant{}
+		}
+		if ssid, ok := config["ssid"]; ok && ssid != "" {
+			settings["802-11-wireless"]["ssid"] = dbus.MakeVariant([]byte(ssid))
+		}
+		settings["802-11-wireless"]["hidden"] = dbus.MakeVariant(config["hidden"] == "true")
+
+		// -- password (PSK) -- only update if a new password was supplied
+		if password, ok := config["password"]; ok && password != "" {
+			if settings["802-11-wireless-security"] == nil {
+				settings["802-11-wireless-security"] = map[string]dbus.Variant{}
+			}
+			settings["802-11-wireless-security"]["psk"] = dbus.MakeVariant(password)
+		}
+
+		// Strip legacy fields that don't survive a GetSettings→Update round-trip.
+		for _, section := range []string{"ipv4", "ipv6"} {
+			if sec, ok := settings[section]; ok {
+				delete(sec, "addresses")
+				delete(sec, "routes")
+			}
+		}
+
+		call := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.Update", 0, settings)
+		if call.Err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to update connection: %w", call.Err)}
+		}
+
+		return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(conn))
+	}
+}
+
 // DeleteConnectionCmd tells NetworkManager to delete a saved connection profile.
 func DeleteConnectionCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath) tea.Cmd {
 	return func() tea.Msg {
@@ -349,5 +403,166 @@ func DeleteConnectionCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath) tea.Cm
 		}
 		// Success handled by signal listener
 		return nil
+	}
+}
+
+// LoadEapEditSettingsCmd reads the current EAP connection settings and secrets
+// from NetworkManager so the edit form can be pre-populated with real values.
+func LoadEapEditSettingsCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath, net common.KnownNetwork) tea.Cmd {
+	return func() tea.Msg {
+		connObj := conn.Object(network.NMDest, connectionPath)
+
+		var settings map[string]map[string]dbus.Variant
+		if err := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSettings", 0).Store(&settings); err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to load EAP settings: %w", err)}
+		}
+
+		msg := common.EapEditSettingsMsg{
+			ConnectionPath: connectionPath,
+			SSID:           net.SSID,
+			AutoConnect:    net.AutoConnect,
+			Hidden:         net.Hidden,
+		}
+
+		// Parse 802-11-wireless SSID (overrides KnownNetwork value if present)
+		if wlan, ok := settings["802-11-wireless"]; ok {
+			if v, ok := wlan["ssid"]; ok {
+				if b, ok := v.Value().([]byte); ok {
+					msg.SSID = string(b)
+				}
+			}
+		}
+
+		// Parse 802-1x section
+		if eap, ok := settings["802-1x"]; ok {
+			// EAP method: stored as []string, e.g. ["peap"]
+			if v, ok := eap["eap"]; ok {
+				if methods, ok := v.Value().([]string); ok && len(methods) > 0 {
+					msg.EapMethod = strings.ToUpper(methods[0])
+				}
+			}
+			if v, ok := eap["identity"]; ok {
+				if s, ok := v.Value().(string); ok {
+					msg.Identity = s
+				}
+			}
+			// Phase2 auth: lowercase string, e.g. "mschapv2"
+			if v, ok := eap["phase2-auth"]; ok {
+				if s, ok := v.Value().(string); ok {
+					msg.Phase2Auth = strings.ToUpper(s)
+				}
+			}
+			// CA cert: stored as []byte "file:///path..." with NM null terminator
+			if v, ok := eap["ca-cert"]; ok {
+				if b, ok := v.Value().([]byte); ok {
+					certStr := strings.TrimPrefix(string(b), "file://")
+					certStr = strings.TrimRight(certStr, "\x00")
+					msg.CaCert = certStr
+				}
+			}
+		}
+
+		// Try to retrieve the password from secrets (graceful degradation on failure)
+		var secrets map[string]map[string]dbus.Variant
+		if err := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSecrets", 0, "802-1x").Store(&secrets); err == nil {
+			if sec, ok := secrets["802-1x"]; ok {
+				if v, ok := sec["password"]; ok {
+					if pw, ok := v.Value().(string); ok {
+						msg.Password = pw
+					}
+				}
+			}
+		}
+
+		return msg
+	}
+}
+
+// UpdateEapConnectionCmd writes edited WPA-EAP connection settings back to
+// NetworkManager. If the submitted password is empty the existing secret is
+// preserved via a GetSecrets call before the update.
+func UpdateEapConnectionCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath, config map[string]string) tea.Cmd {
+	return func() tea.Msg {
+		connObj := conn.Object(network.NMDest, connectionPath)
+
+		var settings map[string]map[string]dbus.Variant
+		if err := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSettings", 0).Store(&settings); err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to get EAP connection settings: %w", err)}
+		}
+
+		// -- connection section --
+		if settings["connection"] == nil {
+			settings["connection"] = map[string]dbus.Variant{}
+		}
+		if ssid := config["ssid"]; ssid != "" {
+			settings["connection"]["id"] = dbus.MakeVariant(ssid)
+		}
+		settings["connection"]["autoconnect"] = dbus.MakeVariant(config["autoconnect"] == "true")
+
+		// -- 802-11-wireless section --
+		if settings["802-11-wireless"] == nil {
+			settings["802-11-wireless"] = map[string]dbus.Variant{}
+		}
+		if ssid := config["ssid"]; ssid != "" {
+			settings["802-11-wireless"]["ssid"] = dbus.MakeVariant([]byte(ssid))
+		}
+		settings["802-11-wireless"]["hidden"] = dbus.MakeVariant(config["hidden"] == "true")
+
+		// -- 802-1x section --
+		if settings["802-1x"] == nil {
+			settings["802-1x"] = map[string]dbus.Variant{}
+		}
+		eap1x := settings["802-1x"]
+
+		if eapMethod := config["eap"]; eapMethod != "" {
+			eap1x["eap"] = dbus.MakeVariant([]string{strings.ToLower(eapMethod)})
+		}
+		if identity := config["identity"]; identity != "" {
+			eap1x["identity"] = dbus.MakeVariant(identity)
+		}
+		if phase2 := config["phase2-auth"]; phase2 != "" && strings.ToUpper(phase2) != "NONE" {
+			eap1x["phase2-auth"] = dbus.MakeVariant(strings.ToLower(phase2))
+		} else {
+			delete(eap1x, "phase2-auth")
+		}
+		// CA cert: absent = no validation; present = "file://" + path + NM null terminator
+		if certPath := strings.TrimSpace(config["ca_cert"]); certPath != "" {
+			eap1x["ca-cert"] = dbus.MakeVariant([]byte("file://" + certPath + "\x00"))
+		} else {
+			delete(eap1x, "ca-cert")
+		}
+
+		// Password: if empty, try to preserve the existing secret
+		password := config["password"]
+		if password == "" {
+			var secrets map[string]map[string]dbus.Variant
+			if err := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.GetSecrets", 0, "802-1x").Store(&secrets); err == nil {
+				if sec, ok := secrets["802-1x"]; ok {
+					if v, ok := sec["password"]; ok {
+						if pw, ok := v.Value().(string); ok {
+							password = pw
+						}
+					}
+				}
+			}
+		}
+		if password != "" {
+			eap1x["password"] = dbus.MakeVariant(password)
+		}
+
+		// Strip legacy fields that don't survive a GetSettings→Update round-trip.
+		for _, section := range []string{"ipv4", "ipv6"} {
+			if sec, ok := settings[section]; ok {
+				delete(sec, "addresses")
+				delete(sec, "routes")
+			}
+		}
+
+		call := connObj.Call("org.freedesktop.NetworkManager.Settings.Connection.Update", 0, settings)
+		if call.Err != nil {
+			return common.ErrMsg{Err: fmt.Errorf("failed to update EAP connection: %w", call.Err)}
+		}
+
+		return common.KnownNetworksUpdateMsg(network.GetKnownNetworks(conn))
 	}
 }

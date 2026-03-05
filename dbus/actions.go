@@ -148,7 +148,11 @@ func AddAndConnectEAPCmd(conn *dbus.Conn, config map[string]string, devicePath d
 		if phase2, ok := config["phase2-auth"]; ok && phase2 != "" && phase2 != "NONE" {
 			eapSettings["phase2-auth"] = dbus.MakeVariant(strings.ToLower(phase2))
 		}
-		if certPath, ok := config["ca_cert"]; ok && certPath != "" {
+		// Intentionally omit ca-cert when none is provided: per the NM 802-1x
+		// spec, an absent ca-cert tells wpa_supplicant to skip server certificate
+		// validation entirely. Do NOT set it to an empty string here or cert
+		// validation will behave unpredictably across NM versions.
+		if certPath := strings.TrimSpace(config["ca_cert"]); certPath != "" {
 			eapSettings["ca-cert"] = dbus.MakeVariant("file://" + certPath)
 		}
 

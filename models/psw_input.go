@@ -1,8 +1,10 @@
 package models
 
 import (
+	"fmt"
 	"netpala/common"
 	"netpala/config"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,9 +12,10 @@ import (
 )
 
 type PasswordInput struct {
-	Message      string
+	Network      common.ScannedNetwork
 	Password     textinput.Model
 	ConfirmValue bool
+	showPassword bool
 	Colors       config.Colors
 }
 
@@ -22,6 +25,8 @@ func ModelPasswordInput(colors config.Colors) PasswordInput {
 	Input.Prompt = ""
 	Input.Width = 31
 	Input.CharLimit = 64
+	Input.EchoMode = textinput.EchoPassword
+	Input.EchoCharacter = '*'
 
 	return PasswordInput{
 		Password:     Input,
@@ -45,6 +50,14 @@ func (m PasswordInput) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ConfirmValue = !m.ConfirmValue
 		case "esc", "ctrl+c":
 			cmds = append(cmds, func() tea.Msg { return common.ExitFormMsg{} })
+		case "ctrl+p":
+			m.showPassword = !m.showPassword
+			if m.showPassword {
+				m.Password.EchoMode = textinput.EchoNormal
+			} else {
+				m.Password.EchoMode = textinput.EchoPassword
+			}
+			return m, nil
 		case "enter":
 			if m.ConfirmValue {
 				cmds = append(cmds, func() tea.Msg { return common.SubmitPasswordMsg{Value: m.Password.Value()} })
@@ -92,9 +105,63 @@ func (m PasswordInput) View() string {
 		cancelButton = inactiveBorderStyle.Render("Cancel")
 	}
 
+	hint := "[ctrl+p: show]"
+	if m.showPassword {
+		hint = "[ctrl+p: hide]"
+	}
+	hintLabel := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.Colors.ActiveText)).
+		Width(40).
+		Align(lipgloss.Center).
+		Render(hint)
+
+	// Network info header
+	ssid := m.Network.SSID
+	if lipgloss.Width(ssid) > 40 {
+		ssid = ssid[:37] + "..."
+	}
+
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(m.Colors.ActiveText)).
+		Width(44).
+		Align(lipgloss.Center)
+
+	dividerStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.Colors.Inactive)).
+		Width(44)
+
+	labelStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.Colors.Inactive)).
+		Bold(true)
+
+	valueStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.Colors.Primary))
+
+	macRow := lipgloss.JoinHorizontal(lipgloss.Left,
+		labelStyle.Width(10).Render("MAC"),
+		valueStyle.Render(m.Network.BSSID),
+	)
+
+	securityRow := lipgloss.JoinHorizontal(lipgloss.Left,
+		labelStyle.Width(10).Render("Security"),
+		valueStyle.Width(34).Render(m.Network.Security),
+	)
+
+	signalRow := lipgloss.JoinHorizontal(lipgloss.Left,
+		labelStyle.Width(10).Render("Signal"),
+		valueStyle.Render(fmt.Sprintf("%d%%", m.Network.Signal)),
+	)
+
 	return containerStyle.Render(
 		lipgloss.JoinVertical(lipgloss.Left,
-			m.Message,
+			titleStyle.Render(ssid),
+			dividerStyle.Render(strings.Repeat("─", 44)),
+			macRow,
+			securityRow,
+			signalRow,
+			"",
+			hintLabel,
 			activeBorderStyle.Width(38).BorderForeground(lipgloss.Color(m.Colors.Active)).Render(m.Password.View()),
 			lipgloss.JoinHorizontal(lipgloss.Center,
 				cancelButton, confirmButton,

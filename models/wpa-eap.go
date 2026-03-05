@@ -19,7 +19,8 @@ type WpaEapForm struct {
 	Password       	textinput.Model
 	CaCert         	textinput.Model
 	focused        	int
-	
+	showPassword   	bool
+
 	SSIDSelected		string
 	EapSelected   	bool
 	Phase2Selected	bool
@@ -176,6 +177,17 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.CaCert = ti
 			}
 			return m, nil
+		// --- toggle password visibility (Ctrl+P) ---
+		case "ctrl+p":
+			if m.focused == 3 {
+				m.showPassword = !m.showPassword
+				if m.showPassword {
+					m.Password.EchoMode = textinput.EchoNormal
+				} else {
+					m.Password.EchoMode = textinput.EchoPassword
+				}
+			}
+			return m, nil
 		case "esc", "ctrl+c":
 			return m, func() tea.Msg { return common.ExitFormMsg{} }
 		}
@@ -298,7 +310,11 @@ func (m WpaEapForm) View() string {
 		IdentityLabel = activeLabelStyle.Render("Identity:")
 		IdentityBox = activeBorderStyle.Render(m.Identity.View())
 	case 3:
-		PasswordLabel = activeLabelStyle.Render("\nPassword:")
+		hint := " [ctrl+p: show]"
+		if m.showPassword {
+			hint = " [ctrl+p: hide]"
+		}
+		PasswordLabel = activeLabelStyle.Render("\nPassword:" + hint)
 		PasswordBox = activeBorderStyle.Render(m.Password.View())
 	case 4:
 		CaCertLabel = activeLabelStyle.Render("\nCA Certificate:")

@@ -446,6 +446,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				default:
 					// Most common case: prompt for password
 					m.PopupState = 2
+					m.PasswordForm.Network = m.SelectedNetwork
 					m.PasswordForm.Password.Focus()
 
 					m.Overlay = updateOverlayModel(m, &m.PasswordForm)

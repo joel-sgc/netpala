@@ -431,6 +431,7 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch m.SelectedNetwork.Security {
 				case "wpa2-eap":
 					m.Form.SSIDSelected = m.SelectedNetwork.SSID
+					m.Form.Network = m.SelectedNetwork
 					m.PopupState = 0
 
 					m.Overlay = updateOverlayModel(m, &m.Form)

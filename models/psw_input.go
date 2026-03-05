@@ -132,7 +132,7 @@ func (m PasswordInput) View() string {
 		Width(44)
 
 	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.Colors.Inactive)).
+		Foreground(lipgloss.Color(m.Colors.Active)).
 		Bold(true)
 
 	valueStyle := lipgloss.NewStyle().

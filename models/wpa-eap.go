@@ -21,6 +21,7 @@ type WpaEapForm struct {
 	focused        	int
 	showPassword   	bool
 
+	Network        	common.ScannedNetwork
 	SSIDSelected		string
 	EapSelected   	bool
 	Phase2Selected	bool
@@ -131,9 +132,9 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// --- focus switching ---
 		case "tab", "shift+tab":
 			if key.String() == "shift+tab" {
-				m.focused = (m.focused + 5) % 6
+				m.focused = (m.focused + 6) % 7
 			} else {
-				m.focused = (m.focused + 1) % 6
+				m.focused = (m.focused + 1) % 7
 			}
 
 			// Update focus state for text inputs
@@ -190,6 +191,13 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "esc", "ctrl+c":
 			return m, func() tea.Msg { return common.ExitFormMsg{} }
+		case "left", "right":
+			switch m.focused {
+			case 5:
+				m.focused = 6
+			case 6:
+				m.focused = 5
+			}
 		}
 	}
 
@@ -239,19 +247,24 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focused++
 			}
 		case 5:
-			// Submit form
-			config := map[string]string{
-				"ssid":				 m.SSIDSelected,
-				"eap":         m.EapMethod.Selected().(EAPMethod).Type,
-				"phase2-auth": m.Phase2Auth.Selected().(EAPMethod).Type,
-				"identity":    m.Identity.Value(),
-				"password":    m.Password.Value(),
-				"ca_cert":     m.CaCert.Value(),
+			// Cancel button
+			if msg.(tea.KeyMsg).String() == "enter" {
+				return m, func() tea.Msg { return common.ExitFormMsg{} }
 			}
-			
-			// Send the message with the data back to the parent
-			return m, func() tea.Msg {
-				return common.SubmitEapFormMsg{Config: config}
+		case 6:
+			// Connect button
+			if msg.(tea.KeyMsg).String() == "enter" {
+				config := map[string]string{
+					"ssid":        m.SSIDSelected,
+					"eap":         m.EapMethod.Selected().(EAPMethod).Type,
+					"phase2-auth": m.Phase2Auth.Selected().(EAPMethod).Type,
+					"identity":    m.Identity.Value(),
+					"password":    m.Password.Value(),
+					"ca_cert":     m.CaCert.Value(),
+				}
+				return m, func() tea.Msg {
+					return common.SubmitEapFormMsg{Config: config}
+				}
 			}
 		}
 	}
@@ -283,21 +296,35 @@ func (m WpaEapForm) View() string {
 		BorderForeground(lipgloss.Color(m.Colors.Active)).
 		Padding(0, 1)
 
+	// Render-only copies with full-width sizing.
+	// inputWidth = content width; visual box = inputWidth + border(2) + padding(2) = 56.
+	const inputWidth = 52
+	identityInput := m.Identity
+	identityInput.Width = inputWidth
+	passwordInput := m.Password
+	passwordInput.Width = inputWidth
+	caCertInput := m.CaCert
+	caCertInput.Width = inputWidth
+
 	// Always render all text boxes, just change the style.
 	EapMethodLabel := inactiveLabelStyle.Render("EAP Method:")
 	phase2Label := inactiveLabelStyle.Render("Phase 2 (inner-auth):")
 
 	IdentityLabel := inactiveLabelStyle.Render("Identity:")
-	IdentityBox := inactiveBorderStyle.Render(m.Identity.View())
+	IdentityBox := inactiveBorderStyle.Render(identityInput.View())
 
 	PasswordLabel := inactiveLabelStyle.Render("\nPassword:")
-	PasswordBox := inactiveBorderStyle.Render(m.Password.View())
+	PasswordBox := inactiveBorderStyle.Render(passwordInput.View())
 
 	CaCertLabel := inactiveLabelStyle.Render("\nCA Certificate:")
-	CaCertBox := inactiveBorderStyle.Render(m.CaCert.View())
+	CaCertBox := inactiveBorderStyle.Render(caCertInput.View())
 
-	submitLabel := inactiveBorderStyle.
-		Width(36).
+	cancelButton := inactiveBorderStyle.
+		Width(27).
+		Align(lipgloss.Center).
+		Render("Cancel")
+	connectButton := inactiveBorderStyle.
+		Width(26).
 		Align(lipgloss.Center).
 		Render("Connect")
 
@@ -308,20 +335,27 @@ func (m WpaEapForm) View() string {
 		phase2Label = activeLabelStyle.Render("Phase 2 (inner-auth):")
 	case 2:
 		IdentityLabel = activeLabelStyle.Render("Identity:")
-		IdentityBox = activeBorderStyle.Render(m.Identity.View())
+		IdentityBox = activeBorderStyle.Render(identityInput.View())
 	case 3:
 		hint := " [ctrl+p: show]"
 		if m.showPassword {
 			hint = " [ctrl+p: hide]"
 		}
 		PasswordLabel = activeLabelStyle.Render("\nPassword:" + hint)
-		PasswordBox = activeBorderStyle.Render(m.Password.View())
+		PasswordBox = activeBorderStyle.Render(passwordInput.View())
 	case 4:
 		CaCertLabel = activeLabelStyle.Render("\nCA Certificate:")
-		CaCertBox = activeBorderStyle.Render(m.CaCert.View())
+		CaCertBox = activeBorderStyle.Render(caCertInput.View())
 	case 5:
-		submitLabel = activeBorderStyle.
-			Width(36).
+		cancelButton = activeBorderStyle.
+			Width(27).
+			Bold(true).
+			Align(lipgloss.Center).
+			BorderForeground(lipgloss.Color(m.Colors.ActiveText)).
+			Render("Cancel")
+	case 6:
+		connectButton = activeBorderStyle.
+			Width(26).
 			Bold(true).
 			Align(lipgloss.Center).
 			BorderForeground(lipgloss.Color(m.Colors.ActiveText)).
@@ -337,24 +371,56 @@ func (m WpaEapForm) View() string {
 		phase2Str = m.Phase2Auth.View()
 	}
 
-	// We perform the string alterations below the remove the spacing reserved for the header and footer of the selector
+	// --- compact network info header ---
+	ssid := m.Network.SSID
+	if lipgloss.Width(ssid) > 44 {
+		ssid = ssid[:41] + "..."
+	}
+	hdrTitleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(m.Colors.ActiveText)).
+		Width(56).
+		Align(lipgloss.Center)
+	hdrLabelStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.Colors.Inactive)).
+		Bold(true)
+	hdrValueStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.Colors.Primary))
+
+	headerInfoRow := lipgloss.JoinHorizontal(lipgloss.Left,
+		hdrLabelStyle.Width(5).Render("MAC"),
+		hdrValueStyle.Width(20).Render(m.Network.BSSID),
+		hdrLabelStyle.Width(10).Render("Security"),
+		hdrValueStyle.Width(10).Render(m.Network.Security),
+		hdrLabelStyle.Width(7).Render("Signal"),
+		hdrValueStyle.Width(4).Render(fmt.Sprintf("%d%%", m.Network.Signal)),
+	)
+	headerDivider := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.Colors.Inactive)).
+		Render(strings.Repeat("─", 56))
+
+	// --- selectors side by side to save vertical space ---
+	eapColumn := lipgloss.NewStyle().Width(26).Render(
+		lipgloss.JoinVertical(lipgloss.Left, EapMethodLabel, eapStr),
+	)
+	phase2Column := lipgloss.NewStyle().Width(30).Render(
+		lipgloss.JoinVertical(lipgloss.Left, phase2Label, phase2Str),
+	)
+	selectorsRow := lipgloss.JoinHorizontal(lipgloss.Top, eapColumn, phase2Column)
+
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		EapMethodLabel,
-		eapStr,
-
-		phase2Label,
-		phase2Str,
-
+		hdrTitleStyle.Render(ssid),
+		headerInfoRow,
+		headerDivider,
+		"",
+		selectorsRow,
 		IdentityLabel,
 		IdentityBox,
-
 		PasswordLabel,
 		PasswordBox,
-
 		CaCertLabel,
 		CaCertBox,
-
-		submitLabel,
+		lipgloss.JoinHorizontal(lipgloss.Top, cancelButton, connectButton),
 	)
 	return formStyle.Render(content)
 }

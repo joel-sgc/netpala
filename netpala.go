@@ -83,6 +83,43 @@ func loadInitialData(Conn *godbus.Conn) tea.Cmd {
 	}
 }
 
+// stableUpdateScannedNetworks merges new scan results into the current list.
+// Existing networks have their signal updated in-place (preserving their order)
+// so minor signal fluctuations don't cause the list to jump around.
+// Truly new networks are sorted among themselves and appended at the end.
+// Networks no longer present in the scan are removed.
+func (m *NetpalaData) stableUpdateScannedNetworks(newNetworks []common.ScannedNetwork) {
+	newMap := make(map[string]common.ScannedNetwork, len(newNetworks))
+	for _, n := range newNetworks {
+		newMap[n.SSID] = n
+	}
+
+	var result []common.ScannedNetwork
+	seen := make(map[string]struct{})
+
+	// Keep existing networks in their current order, just update signal values.
+	for _, existing := range m.ScannedNetworks {
+		if updated, ok := newMap[existing.SSID]; ok {
+			existing.Signal = updated.Signal
+			result = append(result, existing)
+			seen[existing.SSID] = struct{}{}
+		}
+		// Network no longer in scan — drop it.
+	}
+
+	// Append brand-new networks (sorted among themselves by signal).
+	var brandNew []common.ScannedNetwork
+	for _, n := range newNetworks {
+		if _, alreadySeen := seen[n.SSID]; !alreadySeen {
+			brandNew = append(brandNew, n)
+		}
+	}
+	common.SortDevicesBySignal(brandNew)
+	result = append(result, brandNew...)
+
+	m.ScannedNetworks = result
+}
+
 func (m *NetpalaData) FilterKnownFromScanned() {
 	// Create a map of known SSIDs for fast lookups (more efficient than a nested loop)
 	knownSSIDs := make(map[string]struct{})
@@ -339,7 +376,10 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(dbus.WaitForDBusSignal(m.Conn, m.DBusSignals), debounceCmd)
 		}
 		// This is the actual data from a completed scan.
-		m.ScannedNetworks = msg
+		// Use a stable merge so existing networks keep their position; only
+		// signal values are updated in-place. This prevents the list from
+		// jumping around due to minor signal fluctuations between scans.
+		m.stableUpdateScannedNetworks([]common.ScannedNetwork(msg))
 		m.FilterKnownFromScanned()
 
 		// No need to re-arm listener here, as it's handled by the debounce logic.

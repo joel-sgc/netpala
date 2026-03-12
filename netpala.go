@@ -107,15 +107,14 @@ func (m *NetpalaData) stableUpdateScannedNetworks(newNetworks []common.ScannedNe
 		// Network no longer in scan — drop it.
 	}
 
-	// Append brand-new networks (sorted among themselves by signal).
-	var brandNew []common.ScannedNetwork
+	// Append brand-new networks, then sort the whole list so they land in the
+	// correct position rather than always being tacked on at the end.
 	for _, n := range newNetworks {
 		if _, alreadySeen := seen[n.SSID]; !alreadySeen {
-			brandNew = append(brandNew, n)
+			result = append(result, n)
 		}
 	}
-	common.SortDevicesBySignal(brandNew)
-	result = append(result, brandNew...)
+	common.SortDevicesBySignal(result)
 
 	m.ScannedNetworks = result
 }
@@ -355,6 +354,17 @@ func (m NetpalaData) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case common.DeviceUpdateMsg:
 		m.DeviceData = msg
+		return m, dbus.WaitForDBusSignal(m.Conn, m.DBusSignals)
+
+	case common.ScanningStateMsg:
+		// Update only the Scanning field on the matching device, without a full
+		// re-fetch that would race and always see Scanning=false.
+		for i := range m.DeviceData {
+			if m.DeviceData[i].Path == msg.DevicePath {
+				m.DeviceData[i].Scanning = msg.Scanning
+				break
+			}
+		}
 		return m, dbus.WaitForDBusSignal(m.Conn, m.DBusSignals)
 
 	case common.VpnUpdateMsg:

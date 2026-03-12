@@ -23,11 +23,29 @@ func WaitForDBusSignal(conn *dbus.Conn, sig chan *dbus.Signal) tea.Cmd {
 					// --- THIS IS THE FIX ---
 					// Check if properties changed on the main NM object OR a Device object.
 					// This ensures we catch WirelessEnabled changes AND device state/scanning changes.
-					if iface == network.NMDest || iface == network.DevIF || iface == network.WifiIF {
+					if iface == network.NMDest || iface == network.DevIF {
 						// Refresh devices and potentially VPNs (as device state affects VPN)
 						return tea.BatchMsg{
 							func() tea.Msg { return common.DeviceUpdateMsg(network.GetDevicesData(conn)) },
 							func() tea.Msg { return common.VpnUpdateMsg(network.GetVpnData(conn)) }, // VPN status might depend on device state
+						}
+					}
+					if iface == network.WifiIF {
+						// Read the Scanning property directly from the signal body to avoid
+						// a race where GetDevicesData always sees Scanning=false because NM
+						// finishes the scan before our round-trip D-Bus re-fetch completes.
+						if len(s.Body) > 1 {
+							if changedProps, ok := s.Body[1].(map[string]dbus.Variant); ok {
+								if scanningVar, ok := changedProps["Scanning"]; ok {
+									scanning, _ := scanningVar.Value().(bool)
+									return common.ScanningStateMsg{DevicePath: s.Path, Scanning: scanning}
+								}
+							}
+						}
+						// Other WifiIF property changes — fall through to a full device refresh.
+						return tea.BatchMsg{
+							func() tea.Msg { return common.DeviceUpdateMsg(network.GetDevicesData(conn)) },
+							func() tea.Msg { return common.VpnUpdateMsg(network.GetVpnData(conn)) },
 						}
 					}
 					// --- END FIX ---
@@ -105,20 +123,6 @@ func RequestScan(conn *dbus.Conn) tea.Cmd {
 
 func GetScanResults(conn *dbus.Conn) tea.Cmd {
 	return func() tea.Msg {
-		nm := conn.Object(network.NMDest, dbus.ObjectPath(network.NMPath))
-		var devPaths []dbus.ObjectPath
-		if err := nm.Call(network.NMDest+".GetDevices", 0).Store(&devPaths); err != nil {
-			return common.ErrMsg{Err: err}
-		}
-
-		for _, devPath := range devPaths {
-			devObj := conn.Object(network.NMDest, devPath)
-			devProps := network.GetProps(devObj, network.DevIF)
-			if devProps["DeviceType"].Value().(uint32) == 2 { // WiFi device
-				_ = devObj.Call(network.WifiIF+".RequestScan", 0, map[string]dbus.Variant{})
-			}
-		}
-		
 		return common.ScannedNetworksUpdateMsg(network.GetScannedNetworks(conn))
 	}
 }

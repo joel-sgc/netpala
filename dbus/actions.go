@@ -144,6 +144,7 @@ func AddAndConnectEAPCmd(conn *dbus.Conn, config map[string]string, devicePath d
 			"eap":      dbus.MakeVariant([]string{strings.ToLower(eapMethod)}),
 			"identity": dbus.MakeVariant(identity),
 			"password": dbus.MakeVariant(config["password"]),
+			"password-flags": dbus.MakeVariant(uint32(0)),
 		}
 		if phase2, ok := config["phase2-auth"]; ok && phase2 != "" && phase2 != "NONE" {
 			eapSettings["phase2-auth"] = dbus.MakeVariant(strings.ToLower(phase2))
@@ -177,41 +178,31 @@ func AddAndConnectEAPCmd(conn *dbus.Conn, config map[string]string, devicePath d
 			"ipv6":   {"method": dbus.MakeVariant("auto")},
 		}
 
-		// 5. Add the connection via D-Bus
-		settingsObj := conn.Object(network.NMDest, "/org/freedesktop/NetworkManager/Settings")
-		call := settingsObj.Call("org.freedesktop.NetworkManager.Settings.AddConnection", 0, settings)
+		// 5. Add and activate the connection atomically via D-Bus.
+		// Using AddAndActivateConnection instead of separate AddConnection +
+		// ActivateConnection ensures secrets remain available throughout the
+		// activation handshake, avoiding intermittent "secrets required" errors.
+		nm := conn.Object(network.NMDest, dbus.ObjectPath(network.NMPath))
+		call := nm.Call("org.freedesktop.NetworkManager.AddAndActivateConnection", 0, settings, devicePath, dbus.ObjectPath("/"))
 		if call.Err != nil {
-			return common.ErrMsg{Err: fmt.Errorf("failed to add EAP connection: %w", call.Err)}
+			return common.ErrMsg{Err: fmt.Errorf("failed to add and activate EAP connection: %w", call.Err)}
 		}
 
-		// 6. Get the path (optional)
-		var newConnectionPath dbus.ObjectPath
-		err = call.Store(&newConnectionPath) // Store error
-
-		// 7. Create the delayed refresh command
+		// 6. Create the delayed refresh command
 		refreshCmd := tea.Tick(150*time.Millisecond, func(t time.Time) tea.Msg {
 			return common.RefreshKnownNetworksMsg{}
 		})
 
-		// 8. Create the optimistic update message
+		// 7. Create the optimistic update message
 		optimisticMsg := common.OptimisticAddMsg{
 			SSID:     ssid,
-			Security: "wpa2-eap", // Generally correct assumption for EAP
+			Security: "wpa2-eap",
 		}
 
-		// 9. Batch commands based on success
-		var batchCmds []tea.Cmd
-		batchCmds = append(batchCmds, func() tea.Msg { return optimisticMsg }) // Send optimistic update first
-		batchCmds = append(batchCmds, refreshCmd)                             // Schedule real refresh
-
-		if err == nil {
-			// If we got the path, attempt connection
-			batchCmds = append(batchCmds, ConnectToNetworkCmd(conn, newConnectionPath, devicePath))
-		} else {
-			// If we didn't get the path, report the error but still refresh
-			batchCmds = append(batchCmds, func() tea.Msg { return common.ErrMsg{Err: fmt.Errorf("added EAP connection but failed to read path: %w", err)} })
-		}
-		return tea.Batch(batchCmds...)
+		return tea.Batch(
+			func() tea.Msg { return optimisticMsg },
+			refreshCmd,
+		)
 	}
 }
 
@@ -548,6 +539,7 @@ func UpdateEapConnectionCmd(conn *dbus.Conn, connectionPath dbus.ObjectPath, con
 		}
 		if password != "" {
 			eap1x["password"] = dbus.MakeVariant(password)
+			eap1x["password-flags"] = dbus.MakeVariant(uint32(0))
 		}
 
 		// Strip legacy fields that don't survive a GetSettings→Update round-trip.

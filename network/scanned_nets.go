@@ -70,6 +70,7 @@ func GetScannedNetworks(c *dbus.Conn) []common.ScannedNetwork {
 			}
 
 			allNetworks = append(allNetworks, common.ScannedNetwork{
+				Path:     apPath,
 				SSID:     common.SanitizeSSID(ssid, "[?]"),
 				BSSID:    bssid,
 				Security: getSecurityType(wpaFlags, rsnFlags),

@@ -261,6 +261,7 @@ func (m WpaEapForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					"identity":    m.Identity.Value(),
 					"password":    m.Password.Value(),
 					"ca_cert":     m.CaCert.Value(),
+					"ap_path":     string(m.Network.Path),
 				}
 				return m, func() tea.Msg {
 					return common.SubmitEapFormMsg{Config: config}

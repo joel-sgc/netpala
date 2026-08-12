@@ -182,8 +182,12 @@ func AddAndConnectEAPCmd(conn *dbus.Conn, config map[string]string, devicePath d
 		// Using AddAndActivateConnection instead of separate AddConnection +
 		// ActivateConnection ensures secrets remain available throughout the
 		// activation handshake, avoiding intermittent "secrets required" errors.
+		apPath := dbus.ObjectPath(config["ap_path"])
+		if apPath == "" {
+			apPath = dbus.ObjectPath("/")
+		}
 		nm := conn.Object(network.NMDest, dbus.ObjectPath(network.NMPath))
-		call := nm.Call("org.freedesktop.NetworkManager.AddAndActivateConnection", 0, settings, devicePath, dbus.ObjectPath("/"))
+		call := nm.Call("org.freedesktop.NetworkManager.AddAndActivateConnection", 0, settings, devicePath, apPath)
 		if call.Err != nil {
 			return common.ErrMsg{Err: fmt.Errorf("failed to add and activate EAP connection: %w", call.Err)}
 		}

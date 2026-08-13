@@ -121,7 +121,7 @@
 
             package = lib.mkOption {
               type = lib.types.package;
-              default = self.packages.${pkgs.system}.default;
+              default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
               description = "The netpala package to use";
             };
           };
@@ -192,7 +192,7 @@
 
       # Overlay for use with other flakes
       overlays.default = final: prev: {
-        netpala = self.packages.${prev.system}.default;
+        netpala = self.packages.${prev.stdenv.hostPlatform.system}.default;
       };
     };
 }

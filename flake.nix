@@ -6,28 +6,37 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
         netpala = pkgs.buildGoModule {
           pname = "netpala";
-          version = "0.1.0";
+          version = "1.3.0";
 
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
-            filter = path: type:
+            filter =
+              path: type:
               let
                 baseName = baseNameOf path;
               in
               # Exclude vendor directory, result symlinks, and other non-essential files
-              !(baseName == "vendor" ||
-                baseName == "result" ||
-                pkgs.lib.hasPrefix "result-" baseName ||
-                baseName == ".direnv" ||
-                baseName == ".git" ||
-                baseName == "flake.lock");
+              !(
+                baseName == "vendor"
+                || baseName == "result"
+                || pkgs.lib.hasPrefix "result-" baseName
+                || baseName == ".direnv"
+                || baseName == ".git"
+                || baseName == "flake.lock"
+              );
           };
 
           vendorHash = "sha256-nSLOvVn4gtpUOmi+msKSHMBU+5ly9QEENQEeFrEbuII=";
@@ -93,9 +102,16 @@
           '';
         };
       }
-    ) // {
+    )
+    // {
       # NixOS module for system-wide installation
-      nixosModules.default = { config, lib, pkgs, ... }:
+      nixosModules.default =
+        {
+          config,
+          lib,
+          pkgs,
+          ...
+        }:
         let
           cfg = config.programs.netpala;
         in
@@ -115,6 +131,62 @@
 
             # Ensure NetworkManager and dbus are available
             services.dbus.enable = true;
+          };
+        };
+
+      # Home Manager module for per-user installation + config.toml generation
+      homeManagerModules.default =
+        {
+          config,
+          lib,
+          pkgs,
+          ...
+        }:
+        let
+          cfg = config.programs.netpala;
+          tomlFormat = pkgs.formats.toml { };
+        in
+        {
+          options.programs.netpala = {
+            enable = lib.mkEnableOption "netpala network manager TUI";
+
+            package = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${pkgs.system}.default;
+              description = "The netpala package to use";
+            };
+
+            settings = lib.mkOption {
+              type = tomlFormat.type;
+              default = { };
+              description = ''
+                Configuration written to
+                `$XDG_CONFIG_HOME/netpala/config.toml`. Any keys you omit
+                fall back to netpala's built-in defaults. See
+                `config/keybindings.go` for the full set of `[colors]` and
+                `[keybindings]` keys.
+              '';
+              example = lib.literalExpression ''
+                {
+                  colors = {
+                    primary = "#a7abca";
+                    active = "#9cca69";
+                  };
+                  keybindings = {
+                    quit.keys = [ "q" "ctrl+c" ];
+                    scan.keys = [ "s" ];
+                  };
+                }
+              '';
+            };
+          };
+
+          config = lib.mkIf cfg.enable {
+            home.packages = [ cfg.package ];
+
+            xdg.configFile."netpala/config.toml" = lib.mkIf (cfg.settings != { }) {
+              source = tomlFormat.generate "netpala-config.toml" cfg.settings;
+            };
           };
         };
 
